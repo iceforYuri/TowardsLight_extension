@@ -248,6 +248,40 @@ button.small:disabled { opacity: 0.45; cursor: default; transform: none; }
 .toast.on { opacity: 1; transform: none; }
 .toast svg { width: 15px; height: 15px; stroke: var(--ok); stroke-width: 2.4; fill: none; }
 
+/* ---- 链接管理 ---- */
+.lm-ghead { display: flex; align-items: baseline; gap: 10px; margin: 26px 0 4px; }
+.main > .lm-ghead:first-child { margin-top: 0; }
+.lm-ghead h2 { font-family: var(--serif); font-size: 17px; font-weight: 600; margin: 0; }
+.lm-gid { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+.lm-gops { margin-left: auto; display: flex; gap: 4px; }
+.lm-gdesc { font-size: 12px; color: var(--muted); margin: 0 0 10px; }
+.lm-rows { border: 1px solid var(--line); border-radius: 12px; background: var(--raise); }
+.lm-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--line); transition: background 0.15s var(--ease); }
+.lm-row:first-child { border-top: 0; }
+.lm-row:hover { background: var(--raise-2); }
+.lm-ico { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: color-mix(in srgb, var(--fg) 6%, transparent); color: var(--muted); flex: none; }
+.lm-ico svg { width: 15px; height: 15px; }
+.lm-main { flex: 1; min-width: 0; }
+.lm-title { font-size: 13px; font-weight: 600; display: flex; gap: 7px; align-items: center; }
+.lm-desc { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+.lm-meta { font-family: var(--mono); font-size: 11px; color: var(--faint); flex: none; max-width: 34%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lm-badge { font-size: 10px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--line-strong); color: var(--muted); font-family: var(--mono); flex: none; }
+.lm-badge.feat { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-soft); }
+.lm-ops { display: flex; gap: 2px; opacity: 0; transition: opacity 0.15s var(--ease); flex: none; }
+.lm-row:hover .lm-ops, .lm-ops:focus-within { opacity: 1; }
+.lm-ops button { border: 0; background: transparent; color: var(--muted); cursor: pointer; width: 26px; height: 26px; border-radius: 6px; font-size: 12.5px; display: grid; place-items: center; transition: background 0.15s, color 0.15s; }
+.lm-ops button:hover { background: var(--raise); color: var(--fg); }
+.lm-ops button:disabled { opacity: 0.3; cursor: default; }
+.lm-ops button.armed { color: var(--vscode-button-foreground, #fff); background: var(--err); width: auto; padding: 0 9px; }
+.lm-empty { padding: 14px; font-size: 12px; color: var(--faint); text-align: center; }
+.lm-add { border: 1px dashed var(--line-strong); background: transparent; border-radius: 12px; width: 100%; padding: 9px; color: var(--muted); cursor: pointer; margin-top: 10px; font: inherit; font-size: 12.5px; transition: color 0.18s var(--ease), border-color 0.18s var(--ease); }
+.lm-add:hover { color: var(--accent); border-color: var(--accent); }
+.lm-editor { border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); border-radius: 12px; padding: 16px 18px; margin: 10px 0; background: var(--raise); animation: rise 0.3s var(--ease); }
+.lm-editor .icon-grid { max-height: 150px; }
+.toc .cnt { margin-left: auto; font-family: var(--mono); font-size: 10px; opacity: 0.6; }
+.toc .toc-new { color: var(--faint); border: 0; background: none; font: inherit; font-size: 12px; cursor: pointer; text-align: left; display: flex; padding: 6px 11px; border-radius: 7px; width: 100%; }
+.toc .toc-new:hover { color: var(--accent); background: var(--raise-2); }
+
 /* ---- 左侧目录(长表单) ---- */
 html { scroll-behavior: smooth; }
 .layout { display: flex; gap: 26px; align-items: flex-start; }

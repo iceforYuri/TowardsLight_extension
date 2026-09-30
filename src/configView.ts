@@ -38,7 +38,7 @@ export class ConfigProvider implements vscode.TreeDataProvider<vscode.TreeItem> 
     const entries: Entry[] = [
       { label: '编辑站点信息', description: 'siteName / author / bio / 状态…', icon: 'gear', command: 'towardsLight.editSiteConfig' },
       { label: '管理分类', description: '新增 / 修改图标、色调与描述', icon: 'folder', command: 'towardsLight.addCategory' },
-      { label: '新增链接', description: '写入 links.ts', icon: 'link', command: 'towardsLight.addLink' },
+      { label: '管理链接', description: '列表、排序、编辑、分组', icon: 'link', command: 'towardsLight.addLink' },
       { label: '新增 Lucide 图标', description: '补录进 Icon.astro', icon: 'symbol-misc', command: 'towardsLight.addIcon' },
       { label: '打开 site.ts', icon: 'go-to-file', command: 'towardsLight.openSiteFile' },
       { label: '打开 links.ts', icon: 'go-to-file', command: 'towardsLight.openLinksFile' },

@@ -145,6 +145,53 @@ assert.ok(!/Pinia[\s\S]*?external/.test(linksText.split('Pinia')[1]?.slice(0, 20
 ok('addLink 新建分组 + 可选字段按需输出');
 console.log('\n新增链接写入效果:' + linksText.match(/\{\n    title: 'Pinia'[\s\S]*?\},/)[0]);
 
+// ── 链接管理:读全量 / 修改 / 排序 / 删除 / 分组 CRUD ──
+const all = core.readLinks(linksFile);
+assert.equal(all.length, 16, 'showcase 14 条 + 测试新增 2 条');
+assert.equal(all[0].title, 'GitHub');
+assert.equal(all[0].external, true);
+assert.equal(all.at(-1).title, 'Pinia');
+assert.equal(all.at(-1).external, false, '未写 external 的应读为 false');
+ok('readLinks 读全量(顺序/布尔/可选字段)');
+
+core.updateLink(linksFile, 'https://pinia.vuejs.org', {
+  title: 'PiniaX', icon: 'star', featured: true, status: '', group: 'tools',
+});
+const pinia = core.readLinks(linksFile).find((l) => l.href === 'https://pinia.vuejs.org');
+assert.equal(pinia.title, 'PiniaX');
+assert.equal(pinia.icon, 'star', 'icon 从无到有应补行');
+assert.equal(pinia.featured, true, 'featured 从无到有应补行');
+assert.equal(pinia.status, undefined, 'status 传空应删除(原本就没有)');
+assert.equal(pinia.group, 'tools', '跨组移动 = 改 group 字段');
+core.updateLink(linksFile, 'https://example.com', { external: false, status: '不再常用' });
+const ex = core.readLinks(linksFile).find((l) => l.href === 'https://example.com');
+assert.equal(ex.external, false, 'external 转 false 应移除该字段');
+assert.equal(ex.status, '不再常用');
+ok('updateLink 字段增删改');
+
+const before1 = core.readLinks(linksFile).map((l) => l.href);
+core.moveLink(linksFile, before1[1], -1);
+const after1 = core.readLinks(linksFile).map((l) => l.href);
+assert.equal(after1[0], before1[1]);
+assert.equal(after1[1], before1[0]);
+core.moveLink(linksFile, after1[0], -1); // 已在顶部,应无操作
+assert.equal(core.readLinks(linksFile)[0].href, after1[0]);
+ok('moveLink 相邻交换 + 边界无操作');
+
+core.deleteLink(linksFile, 'https://pinia.vuejs.org');
+assert.ok(!core.readLinks(linksFile).some((l) => l.href === 'https://pinia.vuejs.org'));
+ok('deleteLink 按 href 删除');
+
+core.addGroup(linksFile, { id: 'podcast', label: 'Podcast', description: '常听的播客' });
+assert.ok(core.readLinkGroups(linksFile).some((g) => g.id === 'podcast'));
+assert.throws(() => core.addGroup(linksFile, { id: 'podcast', label: 'x', description: 'x' }), /已存在/);
+core.updateGroup(linksFile, 'podcast', { label: '播客', description: '通勤时听' });
+const pg = core.readLinkGroups(linksFile).find((g) => g.id === 'podcast');
+assert.equal(pg.label, '播客');
+core.deleteGroup(linksFile, 'podcast');
+assert.ok(!core.readLinkGroups(linksFile).some((g) => g.id === 'podcast'));
+ok('分组 addGroup / updateGroup / deleteGroup');
+
 // ── Icon.astro ──
 const icons = core.readIcons(iconFile);
 assert.ok(icons.length > 30);

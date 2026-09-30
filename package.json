@@ -2,7 +2,7 @@
   "name": "towards-light-editor",
   "displayName": "TowardsLight 博客工具",
   "description": "TowardsLight 博客的文章管理、写作预览与站点配置工具(本地扩展)",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "private": true,
   "publisher": "towardslight",
   "license": "MIT",
@@ -94,7 +94,7 @@
       },
       {
         "command": "towardsLight.addLink",
-        "title": "新增链接",
+        "title": "管理链接",
         "icon": "$(link)"
       },
       {

@@ -10,6 +10,7 @@ import {
   Project,
   PropertyAssignment,
   QuoteKind,
+  SyntaxKind,
 } from 'ts-morph';
 import { insertIntoLiteral } from './textEdit';
 
@@ -318,6 +319,156 @@ export interface LinkGroup {
   description: string;
 }
 
+export interface LinkItem {
+  title: string;
+  description: string;
+  href: string;
+  group: string;
+  icon?: string;
+  external: boolean;
+  featured: boolean;
+  status?: string;
+}
+
+function techLinksArray(sf: import('ts-morph').SourceFile): import('ts-morph').ArrayLiteralExpression {
+  const decl = sf.getVariableDeclarationOrThrow('techLinks');
+  const arr = unwrapAs(decl.getInitializer());
+  if (!arr || !Node.isArrayLiteralExpression(arr)) {
+    throw new Error('techLinks 不是数组字面量,文件结构可能已被手动改过');
+  }
+  return arr;
+}
+
+function readBoolProp(obj: ObjectLiteralExpression, name: string): boolean {
+  const n = unwrapAs(getProp(obj, name)?.getInitializer());
+  return !!n && n.getKind() === SyntaxKind.TrueKeyword;
+}
+
+/** 读全量 techLinks(按文件顺序,即页面展示顺序) */
+export function readLinks(linksFile: string): LinkItem[] {
+  const sf = newProject().addSourceFileAtPath(linksFile);
+  const arr = techLinksArray(sf);
+  const out: LinkItem[] = [];
+  for (const el of arr.getElements()) {
+    if (!Node.isObjectLiteralExpression(el)) continue;
+    out.push({
+      title: readStringProp(el, 'title') ?? '',
+      description: readStringProp(el, 'description') ?? '',
+      href: readStringProp(el, 'href') ?? '',
+      group: readStringProp(el, 'group') ?? '',
+      icon: readStringProp(el, 'icon') || undefined,
+      external: readBoolProp(el, 'external'),
+      featured: readBoolProp(el, 'featured'),
+      status: readStringProp(el, 'status') || undefined,
+    });
+  }
+  return out;
+}
+
+function findLink(arr: import('ts-morph').ArrayLiteralExpression, href: string): ObjectLiteralExpression {
+  const el = arr.getElements().find(
+    (e) => Node.isObjectLiteralExpression(e) && readStringProp(e, 'href') === href,
+  );
+  if (!el || !Node.isObjectLiteralExpression(el)) {
+    throw new Error(`没找到链接:${href}(文件可能已被手动改过)`);
+  }
+  return el;
+}
+
+/** 在对象字面量收尾前文本级插入多行(每行自带尾逗号),保持仓库缩进风格 */
+function insertLinesBeforeClose(text: string, node: Node, lines: string[]): string {
+  const end = node.getEnd() - 1;
+  let p = end;
+  while (p > 0 && /\s/.test(text[p - 1])) p--;
+  const prevChar = text[p - 1];
+  const needsComma = prevChar !== ',' && prevChar !== '{' && prevChar !== '[';
+  return text.slice(0, p) + (needsComma ? ',' : '') + '\n' + lines.join('\n') + text.slice(p);
+}
+
+/** 就地修改链接(href 是 key,不可改);icon/status 传空串=删除该字段,布尔 false=移除 */
+export function updateLink(linksFile: string, href: string, patch: Partial<Omit<LinkItem, 'href'>>): number {
+  const project = newProject();
+  const sf = project.addSourceFileAtPath(linksFile);
+  const obj = findLink(techLinksArray(sf), href);
+  let changed = 0;
+
+  for (const f of ['title', 'description', 'group'] as const) {
+    if (patch[f] !== undefined && writeStringProp(obj, f, patch[f])) changed++;
+  }
+  const insertLines: string[] = [];
+  for (const f of ['icon', 'status'] as const) {
+    const v = patch[f];
+    if (v === undefined) continue;
+    const existing = getProp(obj, f);
+    if (v) {
+      if (existing) {
+        if (writeStringProp(obj, f, v)) changed++;
+      } else {
+        insertLines.push(`    ${f}: '${esc(v)}',`);
+        changed++;
+      }
+    } else if (existing && Node.isPropertyAssignment(existing)) {
+      existing.remove();
+      changed++;
+    }
+  }
+  for (const f of ['external', 'featured'] as const) {
+    const v = patch[f];
+    if (v === undefined) continue;
+    const existing = getProp(obj, f);
+    if (v && !existing) {
+      insertLines.push(`    ${f}: true,`);
+      changed++;
+    } else if (!v && existing && Node.isPropertyAssignment(existing)) {
+      existing.remove();
+      changed++;
+    }
+  }
+  if (!changed) return 0;
+  let text = sf.getFullText();
+  if (insertLines.length) text = insertLinesBeforeClose(text, obj, insertLines);
+  fs.writeFileSync(linksFile, text, 'utf8');
+  return changed;
+}
+
+/** 删除链接(按 href 定位) */
+export function deleteLink(linksFile: string, href: string): void {
+  const project = newProject();
+  const sf = project.addSourceFileAtPath(linksFile);
+  const arr = techLinksArray(sf);
+  const i = arr.getElements().findIndex(
+    (e) => Node.isObjectLiteralExpression(e) && readStringProp(e, 'href') === href,
+  );
+  if (i < 0) throw new Error(`没找到链接:${href}`);
+  arr.removeElement(i);
+  sf.saveSync();
+}
+
+/** 组内/全局顺序调整:与相邻元素交换位置(文本互换,格式无损) */
+export function moveLink(linksFile: string, href: string, dir: -1 | 1): void {
+  const project = newProject();
+  const sf = project.addSourceFileAtPath(linksFile);
+  const arr = techLinksArray(sf);
+  const els = arr.getElements();
+  const i = els.findIndex(
+    (e) => Node.isObjectLiteralExpression(e) && readStringProp(e, 'href') === href,
+  );
+  if (i < 0) throw new Error(`没找到链接:${href}`);
+  const j = i + dir;
+  if (j < 0 || j >= els.length) return;
+  const ti = els[i].getText();
+  const tj = els[j].getText();
+  const elj = els[j];
+  if (!Node.isObjectLiteralExpression(elj)) throw new Error('相邻元素不是对象字面量');
+  const hj = readStringProp(elj, 'href');
+  if (!hj) throw new Error('相邻元素缺少 href,无法交换');
+  els[i].replaceWithText(tj);
+  // 第一次替换后旧节点失效,按 href 重新定位再换回
+  const el2 = findLink(techLinksArray(sf), hj);
+  el2.replaceWithText(ti);
+  sf.saveSync();
+}
+
 /** 读取链接分组(linkGroups 是对象数组:{id, label, description}) */
 export function readLinkGroups(linksFile: string): LinkGroup[] {
   const sf = newProject().addSourceFileAtPath(linksFile);
@@ -335,6 +486,64 @@ export function readLinkGroups(linksFile: string): LinkGroup[] {
     });
   }
   return out.filter((g) => g.id);
+}
+
+function linkGroupsArray(sf: import('ts-morph').SourceFile): import('ts-morph').ArrayLiteralExpression {
+  const decl = sf.getVariableDeclarationOrThrow('linkGroups');
+  const arr = unwrapAs(decl.getInitializer());
+  if (!arr || !Node.isArrayLiteralExpression(arr)) {
+    throw new Error('linkGroups 不是数组字面量,文件结构可能已被手动改过');
+  }
+  return arr;
+}
+
+/** 新增分组(对象形式);id 重名报错 */
+export function addGroup(linksFile: string, group: LinkGroup): void {
+  const project = newProject();
+  const sf = project.addSourceFileAtPath(linksFile);
+  const arr = linkGroupsArray(sf);
+  const dup = arr.getElements().some(
+    (e) => Node.isObjectLiteralExpression(e) && readStringProp(e, 'id') === group.id,
+  );
+  if (dup) throw new Error(`分组「${group.id}」已存在`);
+  const text = insertIntoLiteral(
+    sf.getFullText(),
+    arr,
+    `  { id: '${esc(group.id)}', label: '${esc(group.label)}', description: '${esc(group.description)}' }`,
+  );
+  fs.writeFileSync(linksFile, text, 'utf8');
+}
+
+/** 修改分组显示名/描述;id 是引用 key,不可改 */
+export function updateGroup(
+  linksFile: string,
+  id: string,
+  patch: Partial<Pick<LinkGroup, 'label' | 'description'>>,
+): number {
+  const project = newProject();
+  const sf = project.addSourceFileAtPath(linksFile);
+  const el = linkGroupsArray(sf)
+    .getElements()
+    .find((e) => Node.isObjectLiteralExpression(e) && readStringProp(e, 'id') === id);
+  if (!el || !Node.isObjectLiteralExpression(el)) throw new Error(`分组「${id}」不存在`);
+  let changed = 0;
+  if (patch.label !== undefined && writeStringProp(el, 'label', patch.label)) changed++;
+  if (patch.description !== undefined && writeStringProp(el, 'description', patch.description)) changed++;
+  if (changed) sf.saveSync();
+  return changed;
+}
+
+/** 删除分组(调用方负责确保组内没有链接) */
+export function deleteGroup(linksFile: string, id: string): void {
+  const project = newProject();
+  const sf = project.addSourceFileAtPath(linksFile);
+  const arr = linkGroupsArray(sf);
+  const i = arr
+    .getElements()
+    .findIndex((e) => Node.isObjectLiteralExpression(e) && readStringProp(e, 'id') === id);
+  if (i < 0) throw new Error(`分组「${id}」不存在`);
+  arr.removeElement(i);
+  sf.saveSync();
 }
 
 /** 追加一条链接;分组 id 是新的时,一并补进 linkGroups(对象形式) */
