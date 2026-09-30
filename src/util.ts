@@ -16,6 +16,12 @@ export function initUtil(context: vscode.ExtensionContext): void {
   extContext = context;
 }
 
+/** workspaceState 存取(供 preview 等模块持久化进程账本) */
+export function stateStore(): vscode.Memento {
+  if (!extContext) throw new Error('扩展尚未激活');
+  return extContext.workspaceState;
+}
+
 /** 一个目录是不是 TowardsLight 模板:有 package.json 和档案切换钩子 */
 export function isTemplateDir(dir: string): boolean {
   return (

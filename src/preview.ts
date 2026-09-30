@@ -1,7 +1,7 @@
 import { ChildProcess, spawn } from 'node:child_process';
 import path from 'node:path';
 import * as vscode from 'vscode';
-import { getProfile, getTemplateDir } from './util';
+import { getProfile, getTemplateDir, stateStore } from './util';
 
 /** 一个运行中的预览 server 的账本记录 */
 export interface ServerRec {
@@ -42,10 +42,67 @@ function kill(rec: ServerRec): void {
   }
 }
 
+// ── 跨会话进程账本:Reload Window 会清空内存里的 servers,但子进程还活着 ──
+const STATE_KEY = 'towardsLight.runningServers';
+
+interface PersistedServer {
+  pid: number;
+  port: number;
+  templateDir: string;
+  profileDir: string;
+}
+
+function persistServers(): void {
+  try {
+    const list: PersistedServer[] = servers
+      .filter((s) => s.proc.pid)
+      .map((s) => ({
+        pid: s.proc.pid as number,
+        port: s.port,
+        templateDir: s.templateDir,
+        profileDir: s.profileDir,
+      }));
+    void stateStore().update(STATE_KEY, list);
+  } catch {
+    /* 未激活时跳过 */
+  }
+}
+
+/** activate 时调用:上次会话拉起的 server 已无人记账,按 PID 逐个回收 */
+export function reapOrphanServers(): void {
+  let list: PersistedServer[];
+  try {
+    list = stateStore().get<PersistedServer[]>(STATE_KEY, []);
+  } catch {
+    return;
+  }
+  for (const rec of list) {
+    let alive = false;
+    try {
+      process.kill(rec.pid, 0);
+      alive = true;
+    } catch {
+      /* 进程已不在 */
+    }
+    if (!alive) continue;
+    if (process.platform === 'win32') {
+      spawn('taskkill', ['/pid', String(rec.pid), '/t', '/f']);
+    } else {
+      try {
+        process.kill(rec.pid);
+      } catch {
+        /* 忽略 */
+      }
+    }
+  }
+  void stateStore().update(STATE_KEY, []);
+}
+
 export function stopServer(rec: ServerRec): void {
   kill(rec);
   const i = servers.indexOf(rec);
   if (i >= 0) servers.splice(i, 1);
+  persistServers();
   emitter.fire();
 }
 
@@ -74,11 +131,14 @@ export async function startPreview(): Promise<ServerRec> {
   const proc = spawn(cmd, ['run', 'dev', '--', '--port', String(port)], {
     cwd: templateDir,
     env: { ...process.env, SITE_PROFILE_DIR: profile.dir },
+    // Windows 上新版 Node 直接 spawn .cmd 会抛 EINVAL,走 shell
+    shell: process.platform === 'win32',
   });
   const rec: ServerRec = { proc, port, templateDir, profileDir: profile.dir, startedAt: Date.now() };
   proc.on('exit', () => {
     const i = servers.indexOf(rec);
     if (i >= 0) servers.splice(i, 1);
+    persistServers();
     emitter.fire();
   });
 
@@ -86,6 +146,7 @@ export async function startPreview(): Promise<ServerRec> {
   while (Date.now() < deadline) {
     if (await ping(port)) {
       servers.push(rec);
+      persistServers();
       emitter.fire();
       return rec;
     }
@@ -143,5 +204,6 @@ export async function openPostPreview(file: string | undefined): Promise<void> {
 export function disposeServer(): void {
   for (const rec of [...servers]) kill(rec);
   servers.length = 0;
+  persistServers();
   emitter.fire();
 }

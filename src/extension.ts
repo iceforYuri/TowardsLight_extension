@@ -5,7 +5,7 @@ import { addIcon, lucideIconBody } from './core';
 import { articleImageDir, articleImageRef, copyImageIn } from './core/images';
 import { ConfigProvider } from './configView';
 import { PostNode, PostsProvider } from './posts';
-import { disposeServer, onDidChangeServers, openPostPreview, openSitePreview, startPreview, stopServer } from './preview';
+import { disposeServer, onDidChangeServers, openPostPreview, openSitePreview, reapOrphanServers, startPreview, stopServer } from './preview';
 import { PreviewProvider, ServerNode } from './previewView';
 import { getProfile, getTemplateDir, guard, initUtil, openFile, pickImages, setTemplateDir, workspaceRoot } from './util';
 import { openCategoryForm } from './webviews/category';
@@ -206,6 +206,8 @@ async function startPreviewCommand(): Promise<void> {
 
 export function activate(context: vscode.ExtensionContext): void {
   initUtil(context);
+  // 上次会话拉起的 dev server 可能已成孤儿,按 PID 账本回收
+  reapOrphanServers();
   // 恢复上次选择的档案
   const savedDir = context.workspaceState.get<string>('towardsLight.profileDir');
   if (savedDir && fs.existsSync(path.join(savedDir, 'site.ts'))) {
