@@ -84,21 +84,28 @@ scripts/test-core.mjs
 
 **背景**:表单里选图目前只能选"已在 images/ 里的图"。要支持从电脑任意位置选图(VS Code 原生选择框),复制进档案并自动把 `/images/...` 引用填回表单。
 
-**目录规矩(混合方案,已定)**
+**目录规矩(修订:跟随 personal/ 现有约定)**
 
 ```
-images/
-├── avatar.svg / hero-bg.svg    ← 站点级:头像、页面背景,平铺
-├── covers/<slug>.<ext>         ← 文章封面:slug 命名,重名直接覆盖(语义=换封面)
-└── posts/<slug>/<原文件名>      ← 正文插图:按文章归档,撞名自动加 -2 后缀,不覆盖
+personal/
+├── images/                     ← 站点级:头像、Hero/页面背景;junction 服务,绝对路径 /images/...
+└── posts/
+    ├── my-post.md
+    └── image/                  ← 文章级:封面与正文插图统一放这
+        └── my-post/            ← 按文章名归目录,文件名保留原名,撞名自动加 -2 后缀
+            ├── cover.jpg       ← frontmatter: cover: image/my-post/cover.jpg(相对路径)
+            └── benchmark.png   ← 正文: ![描述](image/my-post/benchmark.png)
 ```
+
+正文图走相对引用(astro:assets 优化,现有粘贴约定已验证可用);封面也用相对路径,与正文图同一套规矩。
+**前置依赖(主仓库改动)**:文章页封面目前只认 `/images/...` 绝对路径(`src={u(cover)}`),需支持相对路径解析(cover 以 `/` 开头照旧走 public;否则按相对文章文件解析,import.meta.glob 资产映射),同时兼容 showcase 现有的绝对路径封面;届时同步更新 personal/posts/模板.md 里的注释示例。
 
 **行为决策(已拍板)**:复制不移动源文件;封面覆盖式更新;正文图不覆盖;不做大文件提醒和压缩。
 
 **三个入口(一次做完)**
 
-1. 新建文章表单:封面下拉加「从电脑选择…」→ 复制为 `covers/<slug>.<ext>` → 自动回填
-2. 站点配置表单:头像及各页背景图字段加选择按钮(站点级平铺);表单范围同时扩到 `site.pages`(各页标题/描述)与 `pageBackdrops`——目前各内容页文案与背景都已配置化,表单要跟上
-3. 写作中:命令「插入正文图片」→ 复制到 `posts/<当前文章slug>/` → 光标处插入 `![描述](/images/posts/<slug>/xxx.png)`
+1. 新建文章表单:封面下拉加「从电脑选择…」→ 复制到 `posts/image/<slug>/` → frontmatter 写相对路径
+2. 站点配置表单:头像及各页背景图字段加选择按钮 → 复制到 `images/`(站点级);表单范围同时扩到 `site.pages`(各页标题/描述)与 `pageBackdrops`——目前各内容页文案与背景都已配置化,表单要跟上
+3. 写作中:命令「插入正文图片」→ 复制到 `posts/image/<当前文章名>/` → 光标处插入 `![描述](image/<文章名>/xxx.png)`
 
-**配套**:博客项目 `.vscode/settings.json` 配 `markdown.copyFiles.destination`,让原生粘贴图片也落进 `src/profiles/active/images/posts/<文章名>/`(经 junction 写入真实档案目录),与扩展规矩一致——否则写作时直接粘贴的图不会被构建服务。
+**配套**:工作区 `markdown.copyFiles.destination` 目标固化为 `image/${documentBaseName}/`(与现有粘贴约定一致;目前该约定不在仓库设置里,换机器会丢,建议落进博客项目的 `.vscode/settings.json`)。
