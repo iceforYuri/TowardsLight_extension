@@ -4,14 +4,13 @@ import * as vscode from 'vscode';
 import { buildPostContent, listPosts, readCategories, SLUG_PATTERN } from '../core';
 import { articleImageDir, articleImageRef, copyImageIn } from '../core/images';
 import { listImages, ProfileInfo } from '../core/profile';
-import { getProfile, pickImages } from '../util';
-import { pageShell, SCRIPT_PREAMBLE } from './shared';
+import { getProfile, pickImages, resolveImageUri } from '../util';
+import { cardHtml, pageShell, SCRIPT_PREAMBLE } from './shared';
+
+const CHECK_SVG = '<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>';
 
 function body(): string {
-  return `
-<h1>新建文章</h1>
-<div class="sub">生成到当前档案的 posts 目录,归档、标签、分类页自动收录</div>
-
+  const main = `
 <label class="f">标题 <span class="req">*</span></label>
 <input type="text" id="title" autofocus>
 
@@ -32,26 +31,36 @@ function body(): string {
 <textarea id="description" placeholder="一句话摘要,出现在列表、文章头部和 RSS 里"></textarea>
 
 <label class="f">标签</label>
-<input type="text" id="tags" placeholder="用逗号分隔,如 Astro, 写作">
+<input type="text" id="tags" placeholder="用逗号分隔,如 Astro, 写作">`;
 
-<div class="row">
-  <div>
-    <label class="f">封面</label>
+  const cover = `
+<label class="f">封面</label>
+<div class="imgrow">
+  <div class="thumb" data-thumb-for="cover"></div>
+  <div class="grow">
     <select id="cover">
       <option value="">无封面</option>
       <option value="__pick__">从电脑选择…</option>
     </select>
-    <div class="hint">选本地图片会复制到 posts/image/&lt;slug&gt;/ 并按相对路径引用</div>
-  </div>
-  <div>
-    <label class="f">封面描述</label>
-    <input type="text" id="coverAlt" placeholder="选封面时建议填写">
   </div>
 </div>
+<div class="hint">选本地图片会复制到 posts/image/&lt;slug&gt;/ 并按相对路径引用</div>
+<label class="f">封面描述</label>
+<input type="text" id="coverAlt" placeholder="选封面时建议填写">
+<label class="f">裁切焦点</label>
+<input type="text" id="coverPosition" placeholder="可选,如 center 30%">
 
-<div class="checks">
-  <label><input type="checkbox" id="draft" checked> 存为草稿(不进入构建)</label>
-</div>
+<div class="checks one">
+  <label class="check-card"><input type="checkbox" id="draft" checked><span class="box">${CHECK_SVG}</span>存为草稿(不进入构建)</label>
+</div>`;
+
+  return `
+<div class="kicker">Towards Light · Studio</div>
+<h1>新建文章</h1>
+<p class="sub">生成到当前档案的 posts 目录,归档、标签、分类页自动收录。</p>
+
+${cardHtml('01', '内容', '标题、分类与摘要', main)}
+${cardHtml('02', '封面', '可选;没有封面的文章同样成立', cover)}
 
 <div class="error" id="error"></div>
 <div class="actions"><button class="primary" id="submit">创建并打开</button></div>
@@ -67,9 +76,9 @@ function slugify(t) {
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 let slugTouched = false;
-$('slug').addEventListener('input', () => { slugTouched = true; });
+$('slug').addEventListener('input', (e) => { if (e.isTrusted) slugTouched = true; });
 $('title').addEventListener('input', (e) => {
-  if (!slugTouched) $('slug').value = slugify(e.target.value);
+  if (e.isTrusted && !slugTouched) $('slug').value = slugify(e.target.value);
 });
 window.addEventListener('message', (e) => {
   const msg = e.data;
@@ -88,6 +97,7 @@ window.addEventListener('message', (e) => {
       sel.appendChild(o);
     }
     restoreState();
+    bindThumb('cover');
   } else if (msg.type === 'coverPicked') {
     const sel = $('cover');
     const o = document.createElement('option');
@@ -95,10 +105,12 @@ window.addEventListener('message', (e) => {
     o.textContent = msg.ref + '(已复制)';
     sel.appendChild(o);
     sel.value = msg.ref;
+    sel.dispatchEvent(new Event('input', { bubbles: true }));
+    if (msg.uri) setThumb('cover', msg.uri);
     showError('');
   } else if (msg.type === 'error') {
     showError(msg.message);
-    $('cover').value = '';
+    if ($('cover').value === '__pick__') $('cover').value = '';
   }
 });
 $('cover').addEventListener('change', (e) => {
@@ -118,6 +130,7 @@ $('submit').addEventListener('click', () => {
       tags: $('tags').value.split(/[,\\uFF0C]/).map((s) => s.trim()).filter(Boolean),
       cover: $('cover').value,
       coverAlt: $('coverAlt').value.trim(),
+      coverPosition: $('coverPosition').value.trim(),
       draft: $('draft').checked,
     },
   });
@@ -135,7 +148,7 @@ export function openNewPostForm(refreshPosts: () => void): void {
     vscode.ViewColumn.One,
     { enableScripts: true, retainContextWhenHidden: true },
   );
-  panel.webview.html = pageShell('新建文章', body(), script());
+  panel.webview.html = pageShell('新建文章', body(), script(), panel.webview.cspSource);
 
   panel.webview.onDidReceiveMessage(async (msg) => {
     if (msg.type === 'ready') {
@@ -143,6 +156,14 @@ export function openNewPostForm(refreshPosts: () => void): void {
       const fromPosts = listPosts(profile.postsDir).map((p) => p.category);
       const categories = [...new Set([...fromMeta, ...fromPosts])].filter(Boolean);
       panel.webview.postMessage({ type: 'init', categories, covers: listImages(profile.imagesDir) });
+      return;
+    }
+    if (msg.type === 'resolveImage') {
+      panel.webview.postMessage({
+        type: 'imageUri',
+        field: msg.field,
+        uri: resolveImageUri(panel.webview, profile, msg.value),
+      });
       return;
     }
     if (msg.type !== 'submit') {
@@ -157,7 +178,12 @@ export function openNewPostForm(refreshPosts: () => void): void {
             return;
           }
           const name = copyImageIn(picked[0], articleImageDir(profile.postsDir, msg.slug));
-          panel.webview.postMessage({ type: 'coverPicked', ref: articleImageRef(msg.slug, name) });
+          const ref = articleImageRef(msg.slug, name);
+          panel.webview.postMessage({
+            type: 'coverPicked',
+            ref,
+            uri: resolveImageUri(panel.webview, profile, ref),
+          });
         } catch (e) {
           panel.webview.postMessage({ type: 'error', message: (e as Error).message });
         }

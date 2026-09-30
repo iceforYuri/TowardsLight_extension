@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import * as vscode from 'vscode';
 import { ProfileInfo, resolveProfile } from './core/profile';
 
@@ -47,4 +49,26 @@ export function guard<T extends unknown[]>(fn: (...args: T) => unknown): (...arg
       vscode.window.showErrorMessage((e as Error).message);
     }
   };
+}
+
+/**
+ * 把 site.ts 里的图片引用解析成 webview 可用的 URI(用于表单缩略图)。
+ * /images/ 开头 → 档案 imagesDir;image/ 开头 → postsDir 下的文章级相对路径。
+ * 解析不到或文件不存在返回 null。
+ */
+export function resolveImageUri(
+  webview: vscode.Webview,
+  profile: ProfileInfo,
+  ref: string,
+): string | null {
+  let file: string | null = null;
+  if (ref.startsWith('/images/') && profile.imagesDir) {
+    const rel = path.resolve(profile.imagesDir, ref.slice('/images/'.length));
+    if (rel.startsWith(path.resolve(profile.imagesDir))) file = rel;
+  } else if (ref.startsWith('image/')) {
+    const abs = path.resolve(profile.postsDir, ref);
+    if (abs.startsWith(path.resolve(profile.postsDir))) file = abs;
+  }
+  if (!file || !fs.existsSync(file)) return null;
+  return webview.asWebviewUri(vscode.Uri.file(file)).toString();
 }

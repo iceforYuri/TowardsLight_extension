@@ -83,6 +83,7 @@ export interface NewPostInput {
   draft: boolean;
   cover?: string;
   coverAlt?: string;
+  coverPosition?: string;
   /** YYYY-MM-DD,缺省取今天 */
   date?: string;
 }
@@ -102,6 +103,7 @@ export function buildPostContent(input: NewPostInput): string {
   if (input.cover) {
     lines.push(`cover: ${yamlScalar(input.cover)}`);
     if (input.coverAlt) lines.push(`coverAlt: ${yamlScalar(input.coverAlt)}`);
+    if (input.coverPosition) lines.push(`coverPosition: ${yamlScalar(input.coverPosition)}`);
   }
   lines.push('---', '', '在这里开始写正文。', '');
   return lines.join('\n');
