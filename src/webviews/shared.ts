@@ -54,6 +54,15 @@ button.primary:hover { background: var(--vscode-button-hoverBackground); }
   border: 1px solid var(--vscode-input-border, rgba(127,127,127,.35));
 }
 .tone.sel { border-color: var(--vscode-focusBorder); background: rgba(127,127,127,.15); }
+h2 { font-size: 1.02em; margin: 26px 0 4px; padding-top: 16px; border-top: 1px solid var(--vscode-input-border, rgba(127,127,127,.25)); }
+.imgrow { display: flex; gap: 6px; align-items: center; }
+.imgrow input { flex: 1; min-width: 0; }
+button.small {
+  padding: 5px 12px; font: inherit; cursor: pointer; border: 0; border-radius: 4px; white-space: nowrap;
+  background: var(--vscode-button-secondaryBackground, rgba(127,127,127,.25));
+  color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+}
+button.small:hover { background: var(--vscode-button-secondaryHoverBackground, rgba(127,127,127,.35)); }
 </style>
 </head>
 <body>

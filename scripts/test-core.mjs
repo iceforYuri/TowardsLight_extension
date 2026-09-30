@@ -32,20 +32,33 @@ function ok(name) {
 const cfg = core.readSiteConfig(siteFile);
 assert.equal(cfg.siteName, '拾光集');
 assert.equal(cfg.statusMode, 'building');
-ok('readSiteConfig 读取基本字段与 currentStatus');
+assert.equal(cfg.heroBackground, '/images/hero-bg.svg');
+assert.equal(cfg.backdrops.archive, '');
+assert.equal(cfg.pages.archive.title, '归档');
+assert.ok(cfg.pages.notFound.description.length > 0);
+ok('readSiteConfig 读取基本字段与嵌套块(currentStatus/homeHero/pageBackdrops/pages)');
 
 const before = fs.readFileSync(siteFile, 'utf8');
 const changed = core.updateSiteConfig(siteFile, {
   siteName: '测试站',
   statusMode: 'writing',
   statusText: '正在验证扩展的读写',
+  heroBackground: '/images/new-hero.jpg',
+  backdrops: { archive: '/images/archive-bg.jpg', tags: '' },
+  pages: { links: { title: '宝藏链接', description: '改写后的链接页描述' } },
 });
-assert.equal(changed, 3);
+assert.equal(changed, 7);
 const cfg2 = core.readSiteConfig(siteFile);
 assert.equal(cfg2.siteName, '测试站');
 assert.equal(cfg2.statusMode, 'writing');
 assert.equal(cfg2.statusText, '正在验证扩展的读写');
-ok('updateSiteConfig 写回并可重读');
+assert.equal(cfg2.heroBackground, '/images/new-hero.jpg');
+assert.equal(cfg2.backdrops.archive, '/images/archive-bg.jpg');
+assert.equal(cfg2.backdrops.tags, '');
+assert.equal(cfg2.pages.links.title, '宝藏链接');
+assert.equal(cfg2.pages.links.description, '改写后的链接页描述');
+assert.equal(cfg2.pages.archive.title, '归档', '未触碰的页面文案不应变化');
+ok('updateSiteConfig 写回顶层字段与嵌套块并可重读');
 
 const after = fs.readFileSync(siteFile, 'utf8');
 assert.ok(after.includes('/** 头像裁切焦点'), '注释应保留');
@@ -179,6 +192,21 @@ const covers = core.listImages(path.join(SHOWCASE, 'images'));
 assert.ok(covers.includes('/images/covers/wide.svg'));
 assert.ok(covers.includes('/images/avatar.svg'));
 ok('listImages 递归列出站点路径');
+
+// ── 图片复制 ──
+const imgTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tl-img-'));
+const src = path.join(imgTmp, 'photo.jpg');
+fs.writeFileSync(src, 'fake-jpg');
+const destDir = path.join(imgTmp, 'posts', 'image', 'my-post');
+assert.equal(core.copyImageIn(src, destDir), 'photo.jpg');
+assert.equal(core.copyImageIn(src, destDir), 'photo-2.jpg', '撞名应加 -2 后缀');
+assert.equal(core.copyImageIn(src, destDir), 'photo-3.jpg', '再次撞名应加 -3 后缀');
+assert.equal(fs.readFileSync(src, 'utf8'), 'fake-jpg', '源文件应保留(复制不移动)');
+assert.equal(core.articleImageRef('my-post', 'photo-2.jpg'), 'image/my-post/photo-2.jpg');
+assert.equal(core.siteImageRef('a.png'), '/images/a.png');
+assert.equal(core.articleImageDir('/x/posts', 'my-post'), path.join('/x/posts', 'image', 'my-post'));
+ok('copyImageIn 撞名加后缀、源文件保留、引用路径正确');
+fs.rmSync(imgTmp, { recursive: true, force: true });
 
 fs.rmSync(tmp, { recursive: true, force: true });
 fs.rmSync(fakeRoot, { recursive: true, force: true });

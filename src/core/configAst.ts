@@ -43,10 +43,10 @@ function readStringProp(obj: ObjectLiteralExpression, name: string): string | un
   return n && Node.isStringLiteral(n) ? n.getLiteralValue() : undefined;
 }
 
-/** 原地改字符串字面量的值,保留外层 as 断言;字段不存在时静默跳过 */
+/** 原地改字符串字面量的值,保留外层 as 断言;字段不存在或值未变化时跳过 */
 function writeStringProp(obj: ObjectLiteralExpression, name: string, value: string): boolean {
   const n = unwrapAs(getProp(obj, name)?.getInitializer());
-  if (!n || !Node.isStringLiteral(n)) return false;
+  if (!n || !Node.isStringLiteral(n) || n.getLiteralValue() === value) return false;
   n.setLiteralValue(value);
   return true;
 }
@@ -58,6 +58,11 @@ const propName = (name: string) =>
   /^[\p{L}_$][\p{L}\p{N}_$]*$/u.test(name) ? name : `'${esc(name)}'`;
 
 // ─────────────────────────── site.ts ───────────────────────────
+
+export interface SitePageCopy {
+  title: string;
+  description: string;
+}
 
 export interface SiteConfigValues {
   siteName: string;
@@ -71,6 +76,13 @@ export interface SiteConfigValues {
   avatarPosition: string;
   statusMode: string;
   statusText: string;
+  /** homeHero.background / textMode */
+  heroBackground: string;
+  heroTextMode: string;
+  /** pageBackdrops.<页面> */
+  backdrops: Record<string, string>;
+  /** pages.<页面>.{title,description} */
+  pages: Record<string, SitePageCopy>;
 }
 
 const TOP_STRING_FIELDS = [
@@ -91,25 +103,64 @@ function siteObject(sf: import('ts-morph').SourceFile): ObjectLiteralExpression 
   return objectLiteralOf(decl.getInitializer(), 'site');
 }
 
+const unquote = (s: string) => s.replace(/^['"]|['"]$/g, '');
+
+/** 容错读取嵌套对象;缺失时返回 undefined 而不是抛错 */
+function nestedObject(site: ObjectLiteralExpression, name: string): ObjectLiteralExpression | undefined {
+  try {
+    return objectLiteralOf(getProp(site, name)?.getInitializer(), name);
+  } catch {
+    return undefined;
+  }
+}
+
 export function readSiteConfig(siteFile: string): SiteConfigValues {
   const sf = newProject().addSourceFileAtPath(siteFile);
   const site = siteObject(sf);
   const values = {} as Record<(typeof TOP_STRING_FIELDS)[number], string>;
   for (const f of TOP_STRING_FIELDS) values[f] = readStringProp(site, f) ?? '';
-  let statusMode = '';
-  let statusText = '';
-  const statusInit = getProp(site, 'currentStatus')?.getInitializer();
-  try {
-    const status = objectLiteralOf(statusInit, 'currentStatus');
-    statusMode = readStringProp(status, 'mode') ?? '';
-    statusText = readStringProp(status, 'text') ?? '';
-  } catch {
-    /* currentStatus 缺失时留空 */
+
+  const status = nestedObject(site, 'currentStatus');
+  const hero = nestedObject(site, 'homeHero');
+
+  const backdrops: Record<string, string> = {};
+  const bd = nestedObject(site, 'pageBackdrops');
+  if (bd) {
+    for (const p of bd.getProperties()) {
+      if (!Node.isPropertyAssignment(p)) continue;
+      backdrops[unquote(p.getName())] = readStringProp(bd, unquote(p.getName())) ?? '';
+    }
   }
-  return { ...values, statusMode, statusText };
+
+  const pages: Record<string, SitePageCopy> = {};
+  const pg = nestedObject(site, 'pages');
+  if (pg) {
+    for (const p of pg.getProperties()) {
+      if (!Node.isPropertyAssignment(p)) continue;
+      try {
+        const o = objectLiteralOf(p.getInitializer(), p.getName());
+        pages[unquote(p.getName())] = {
+          title: readStringProp(o, 'title') ?? '',
+          description: readStringProp(o, 'description') ?? '',
+        };
+      } catch {
+        /* 跳过形态异常的条目 */
+      }
+    }
+  }
+
+  return {
+    ...values,
+    statusMode: status ? (readStringProp(status, 'mode') ?? '') : '',
+    statusText: status ? (readStringProp(status, 'text') ?? '') : '',
+    heroBackground: hero ? (readStringProp(hero, 'background') ?? '') : '',
+    heroTextMode: hero ? (readStringProp(hero, 'textMode') ?? '') : '',
+    backdrops,
+    pages,
+  };
 }
 
-/** 就地更新字段,返回实际改动数量 */
+/** 就地更新字段,返回实际改动数量;档案缺少某个嵌套块时该块静默跳过 */
 export function updateSiteConfig(siteFile: string, patch: Partial<SiteConfigValues>): number {
   const project = newProject();
   const sf = project.addSourceFileAtPath(siteFile);
@@ -119,9 +170,37 @@ export function updateSiteConfig(siteFile: string, patch: Partial<SiteConfigValu
     if (patch[f] !== undefined && writeStringProp(site, f, patch[f])) changed++;
   }
   if (patch.statusMode !== undefined || patch.statusText !== undefined) {
-    const status = objectLiteralOf(getProp(site, 'currentStatus')?.getInitializer(), 'currentStatus');
-    if (patch.statusMode !== undefined && writeStringProp(status, 'mode', patch.statusMode)) changed++;
-    if (patch.statusText !== undefined && writeStringProp(status, 'text', patch.statusText)) changed++;
+    const status = nestedObject(site, 'currentStatus');
+    if (status) {
+      if (patch.statusMode !== undefined && writeStringProp(status, 'mode', patch.statusMode)) changed++;
+      if (patch.statusText !== undefined && writeStringProp(status, 'text', patch.statusText)) changed++;
+    }
+  }
+  if (patch.heroBackground !== undefined || patch.heroTextMode !== undefined) {
+    const hero = nestedObject(site, 'homeHero');
+    if (hero) {
+      if (patch.heroBackground !== undefined && writeStringProp(hero, 'background', patch.heroBackground)) changed++;
+      if (patch.heroTextMode !== undefined && writeStringProp(hero, 'textMode', patch.heroTextMode)) changed++;
+    }
+  }
+  if (patch.backdrops) {
+    const bd = nestedObject(site, 'pageBackdrops');
+    if (bd) {
+      for (const [k, v] of Object.entries(patch.backdrops)) {
+        if (writeStringProp(bd, k, v)) changed++;
+      }
+    }
+  }
+  if (patch.pages) {
+    const pg = nestedObject(site, 'pages');
+    if (pg) {
+      for (const [k, copy] of Object.entries(patch.pages)) {
+        const o = nestedObject(pg, k);
+        if (!o) continue;
+        if (copy.title !== undefined && writeStringProp(o, 'title', copy.title)) changed++;
+        if (copy.description !== undefined && writeStringProp(o, 'description', copy.description)) changed++;
+      }
+    }
   }
   if (changed) sf.saveSync();
   return changed;

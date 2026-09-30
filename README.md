@@ -7,13 +7,17 @@
 **文章管理**(左侧活动栏「博客」图标)
 
 - 文章树:按 草稿 / 已发布 分组,显示日期与分类,点击打开
-- 新建文章:表单填写标题 / slug / 分类 / 标签 / 封面,日期自动,生成到当前档案
+- 新建文章:表单填写标题 / slug / 分类 / 标签 / 封面,日期自动,生成到当前档案;
+  封面可直接从电脑选图,自动复制进档案并按相对路径引用
 - 预览:文章树内联按钮(或命令面板 `预览文章`),自动复用或拉起 `npm run dev`,
   在旁边开 iframe 显示真实渲染,Astro HMR 保存即刷新
+- 插入正文图片:Markdown 编辑器右键菜单,选图(可多选)→ 复制到 `posts/image/<文章名>/`
+  → 光标处插入相对引用
 
 **站点配置**(「站点配置」视图)
 
-- 编辑站点信息:siteName / author / bio / 邮箱 / 头像 / currentStatus 等,表单写回 site.ts
+- 编辑站点信息:基础字段、头像、当前状态、Hero 背景与文字模式、各页背景图、各页文案
+  (pages/pageBackdrops),表单写回 site.ts;图片字段带「选择图片…」按钮,自动复制进档案 images/
 - 新增分类:名称 + 图标选择器(带搜索)+ accent/contrast 色调,写进 categoryMeta
 - 新增链接:分组下拉(可新建组)+ 图标 + featured,追加进 links.ts
 - 新增 Lucide 图标:输入 lucide.dev 上的图标名,自动提取 SVG 补录进 Icon.astro
@@ -80,11 +84,7 @@ scripts/test-core.mjs
 
 **明确不做**:重命名 slug、定时发布
 
-## 图片资产管理(设计已定,待开工)
-
-**背景**:表单里选图目前只能选"已在 images/ 里的图"。要支持从电脑任意位置选图(VS Code 原生选择框),复制进档案并自动把 `/images/...` 引用填回表单。
-
-**目录规矩(修订:跟随 personal/ 现有约定)**
+## 图片资产约定(v0.2.0 已落地)
 
 ```
 personal/
@@ -97,15 +97,7 @@ personal/
             └── benchmark.png   ← 正文: ![描述](image/my-post/benchmark.png)
 ```
 
-正文图走相对引用(astro:assets 优化,现有粘贴约定已验证可用);封面也用相对路径,与正文图同一套规矩。
-**前置依赖(主仓库改动)**:文章页封面目前只认 `/images/...` 绝对路径(`src={u(cover)}`),需支持相对路径解析(cover 以 `/` 开头照旧走 public;否则按相对文章文件解析,import.meta.glob 资产映射),同时兼容 showcase 现有的绝对路径封面;届时同步更新 personal/posts/模板.md 里的注释示例。
-
-**行为决策(已拍板)**:复制不移动源文件;封面覆盖式更新;正文图不覆盖;不做大文件提醒和压缩。
-
-**三个入口(一次做完)**
-
-1. 新建文章表单:封面下拉加「从电脑选择…」→ 复制到 `posts/image/<slug>/` → frontmatter 写相对路径
-2. 站点配置表单:头像及各页背景图字段加选择按钮 → 复制到 `images/`(站点级);表单范围同时扩到 `site.pages`(各页标题/描述)与 `pageBackdrops`——目前各内容页文案与背景都已配置化,表单要跟上
-3. 写作中:命令「插入正文图片」→ 复制到 `posts/image/<当前文章名>/` → 光标处插入 `![描述](image/<文章名>/xxx.png)`
-
-**配套**:工作区 `markdown.copyFiles.destination` 目标固化为 `image/${documentBaseName}/`(与现有粘贴约定一致;目前该约定不在仓库设置里,换机器会丢,建议落进博客项目的 `.vscode/settings.json`)。
+- 复制不移动源文件;正文图不覆盖;不做大文件提醒和压缩
+- 文章页封面双模式(主仓库):`/` 开头走 public junction,否则相对文章文件经 Vite 资产管线解析
+- 工作区 `markdown.copyFiles.destination` 已固化为 `${documentDirName}/image/${documentBaseName}`,
+  原生粘贴与扩展复制落进同一目录规矩

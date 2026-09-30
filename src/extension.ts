@@ -1,10 +1,11 @@
 import path from 'node:path';
 import * as vscode from 'vscode';
 import { addIcon, lucideIconBody } from './core';
+import { articleImageDir, articleImageRef, copyImageIn } from './core/images';
 import { ConfigProvider } from './configView';
 import { PostNode, PostsProvider } from './posts';
 import { disposeServer, openPostPreview } from './preview';
-import { getProfile, guard, openFile, workspaceRoot } from './util';
+import { getProfile, guard, openFile, pickImages } from './util';
 import { openCategoryForm } from './webviews/category';
 import { openLinkForm } from './webviews/link';
 import { openNewPostForm } from './webviews/newPost';
@@ -30,6 +31,33 @@ async function addIconCommand(context: vscode.ExtensionContext): Promise<void> {
   vscode.window.showInformationMessage(`图标 ${name} 已补录进 Icon.astro,分类/链接表单立即可用`);
 }
 
+/** 写作中插图:选图 → 复制到 posts/image/<文章名>/ → 光标处插入相对引用 */
+async function insertImageCommand(): Promise<void> {
+  const profile = getProfile();
+  const editor = vscode.window.activeTextEditor;
+  if (!editor || editor.document.languageId !== 'markdown') {
+    vscode.window.showInformationMessage('先打开一篇 Markdown 文章');
+    return;
+  }
+  const file = editor.document.fileName;
+  const rel = path.relative(profile.postsDir, file);
+  if (rel.startsWith('..')) {
+    vscode.window.showInformationMessage('当前文件不在文章目录(posts/)里');
+    return;
+  }
+  const slug = path.basename(file, '.md');
+  const picked = await pickImages(true);
+  if (!picked?.length) return;
+  const dir = articleImageDir(profile.postsDir, slug);
+  const lines = picked.map((src) => {
+    const name = copyImageIn(src, dir);
+    const alt = path.basename(name, path.extname(name));
+    return `![${alt}](${articleImageRef(slug, name)})`;
+  });
+  await editor.edit((eb) => eb.insert(editor.selection.active, lines.join('\n') + '\n'));
+  vscode.window.showInformationMessage(`已复制 ${lines.length} 张图片到 image/${slug}/ 并插入引用`);
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   const postsProvider = new PostsProvider();
   context.subscriptions.push(
@@ -52,6 +80,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('towardsLight.addCategory', guard(() => openCategoryForm())),
     vscode.commands.registerCommand('towardsLight.addLink', guard(() => openLinkForm())),
     vscode.commands.registerCommand('towardsLight.addIcon', guard(() => addIconCommand(context))),
+    vscode.commands.registerCommand('towardsLight.insertImage', guard(() => insertImageCommand())),
     vscode.commands.registerCommand('towardsLight.openSiteFile', guard(() => openFile(getProfile().siteFile))),
     vscode.commands.registerCommand('towardsLight.openLinksFile', guard(() => openFile(getProfile().linksFile))),
   );

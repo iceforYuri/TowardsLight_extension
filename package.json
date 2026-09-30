@@ -2,7 +2,7 @@
   "name": "towards-light-editor",
   "displayName": "TowardsLight 博客工具",
   "description": "TowardsLight 博客的文章管理、写作预览与站点配置工具(本地扩展)",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "publisher": "towardslight",
   "license": "MIT",
@@ -17,7 +17,7 @@
     "build": "node build.mjs",
     "watch": "node build.mjs --watch",
     "test": "node scripts/test-core.mjs",
-    "package": "vsce package --no-dependencies"
+    "package": "vsce package --no-dependencies --allow-missing-repository --baseImagesUrl https://example.invalid/"
   },
   "contributes": {
     "configuration": {
@@ -94,6 +94,11 @@
         "icon": "$(symbol-misc)"
       },
       {
+        "command": "towardsLight.insertImage",
+        "title": "插入正文图片",
+        "icon": "$(file-media)"
+      },
+      {
         "command": "towardsLight.openSiteFile",
         "title": "打开 site.ts"
       },
@@ -120,6 +125,13 @@
           "command": "towardsLight.openPostPreview",
           "when": "view == towardsLightPosts && viewItem == post",
           "group": "inline"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "towardsLight.insertImage",
+          "when": "editorLangId == markdown",
+          "group": "towardsLight"
         }
       ]
     }

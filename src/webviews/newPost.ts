@@ -2,8 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as vscode from 'vscode';
 import { buildPostContent, listPosts, readCategories, SLUG_PATTERN } from '../core';
+import { articleImageDir, articleImageRef, copyImageIn } from '../core/images';
 import { listImages, ProfileInfo } from '../core/profile';
-import { getProfile } from '../util';
+import { getProfile, pickImages } from '../util';
 import { pageShell, SCRIPT_PREAMBLE } from './shared';
 
 function body(): string {
@@ -36,7 +37,11 @@ function body(): string {
 <div class="row">
   <div>
     <label class="f">封面</label>
-    <select id="cover"><option value="">无封面</option></select>
+    <select id="cover">
+      <option value="">无封面</option>
+      <option value="__pick__">从电脑选择…</option>
+    </select>
+    <div class="hint">选本地图片会复制到 posts/image/&lt;slug&gt;/ 并按相对路径引用</div>
   </div>
   <div>
     <label class="f">封面描述</label>
@@ -82,8 +87,22 @@ window.addEventListener('message', (e) => {
       o.textContent = c;
       sel.appendChild(o);
     }
+  } else if (msg.type === 'coverPicked') {
+    const sel = $('cover');
+    const o = document.createElement('option');
+    o.value = msg.ref;
+    o.textContent = msg.ref + '(已复制)';
+    sel.appendChild(o);
+    sel.value = msg.ref;
+    showError('');
   } else if (msg.type === 'error') {
     showError(msg.message);
+    $('cover').value = '';
+  }
+});
+$('cover').addEventListener('change', (e) => {
+  if (e.target.value === '__pick__') {
+    vscode.postMessage({ type: 'pickCover', slug: $('slug').value.trim() });
   }
 });
 $('submit').addEventListener('click', () => {
@@ -125,7 +144,25 @@ export function openNewPostForm(refreshPosts: () => void): void {
       panel.webview.postMessage({ type: 'init', categories, covers: listImages(profile.imagesDir) });
       return;
     }
-    if (msg.type !== 'submit') return;
+    if (msg.type !== 'submit') {
+      if (msg.type === 'pickCover') {
+        try {
+          if (!SLUG_PATTERN.test(msg.slug ?? '')) {
+            throw new Error('先填好 slug(小写字母/数字/连字符),封面要按它归档');
+          }
+          const picked = await pickImages(false);
+          if (!picked?.length) {
+            panel.webview.postMessage({ type: 'error', message: '' });
+            return;
+          }
+          const name = copyImageIn(picked[0], articleImageDir(profile.postsDir, msg.slug));
+          panel.webview.postMessage({ type: 'coverPicked', ref: articleImageRef(msg.slug, name) });
+        } catch (e) {
+          panel.webview.postMessage({ type: 'error', message: (e as Error).message });
+        }
+      }
+      return;
+    }
     const v = msg.value;
     try {
       if (!v.title) throw new Error('标题不能为空');

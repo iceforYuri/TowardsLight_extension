@@ -23,6 +23,18 @@ export async function openFile(file: string): Promise<void> {
   await vscode.window.showTextDocument(doc);
 }
 
+/** 系统原生图片选择框;取消返回 undefined */
+export async function pickImages(multi = false): Promise<string[] | undefined> {
+  const res = await vscode.window.showOpenDialog({
+    canSelectFiles: true,
+    canSelectFolders: false,
+    canSelectMany: multi,
+    filters: { 图片: ['svg', 'png', 'jpg', 'jpeg', 'webp', 'avif', 'gif'] },
+    openLabel: '选择图片',
+  });
+  return res?.map((u) => u.fsPath);
+}
+
 /** 包装命令执行,把核心层抛出的中文错误弹给用户 */
 export function guard<T extends unknown[]>(fn: (...args: T) => unknown): (...args: T) => void {
   return (...args) => {
