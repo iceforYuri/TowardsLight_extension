@@ -64,24 +64,73 @@ interface ProfilePick extends vscode.QuickPickItem {
   browse?: boolean;
 }
 
+const PROFILE_REQUIRED = ['site.ts', 'links.ts', 'posts'];
+
+/** 一个目录是不是有效档案:同时包含 site.ts / links.ts / posts/ */
+function isProfileDir(dir: string): boolean {
+  return PROFILE_REQUIRED.every((p) => fs.existsSync(path.join(dir, p)));
+}
+
+/** 扫描工作区根目录往下最多两层,找出所有有效档案目录(跳过依赖/构建/模板内部目录) */
+const SCAN_SKIP = new Set(['node_modules', 'dist', 'out', '.git', 'src', 'editor']);
+function scanProfiles(root: string): string[] {
+  const found: string[] = [];
+  const walk = (dir: string, depth: number) => {
+    if (depth > 2) return;
+    if (isProfileDir(dir)) {
+      found.push(dir);
+      return; // 档案目录不再向下钻
+    }
+    if (depth === 2) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name.startsWith('.') || SCAN_SKIP.has(e.name)) continue;
+      walk(path.join(dir, e.name), depth + 1);
+    }
+  };
+  walk(root, 0);
+  return found.sort();
+}
+
 /** 点击「档案:xxx」→ 快速选择切换当前档案;选择持久化到 workspaceState,重载后仍生效 */
 async function switchProfileCommand(
   context: vscode.ExtensionContext,
   refreshAll: () => void,
 ): Promise<void> {
   const root = workspaceRoot();
-  const personal = path.join(root, 'personal');
   const showcase = path.join(root, 'src', 'profiles', 'showcase');
-  const items: ProfilePick[] = [];
-  if (fs.existsSync(path.join(personal, 'site.ts'))) {
-    items.push({ label: '$(account) personal', description: '个人档案', detail: personal, dir: personal });
-  }
-  items.push({ label: '$(package) showcase', description: '内置示例档案', detail: showcase, dir: showcase });
   const envDir = process.env.SITE_PROFILE_DIR;
-  if (envDir && envDir !== personal && envDir !== showcase) {
-    items.push({ label: '$(folder-active) 当前自定义目录', detail: envDir, dir: envDir });
+
+  const items: ProfilePick[] = [];
+  for (const dir of scanProfiles(root)) {
+    const rel = path.relative(root, dir) || '.';
+    const isCurrent = dir === envDir;
+    items.push({
+      label: `${isCurrent ? '$(check) ' : '$(folder) '} ${path.basename(dir)}`,
+      description: isCurrent ? '当前档案' : undefined,
+      detail: rel,
+      dir,
+    });
   }
-  items.push({ label: '$(folder-opened) 选择其他目录…', description: '需要包含 site.ts / links.ts / posts/', browse: true });
+  if (envDir && !items.some((i) => i.dir === envDir) && fs.existsSync(envDir)) {
+    items.push({ label: '$(check) 当前自定义目录', description: '当前档案', detail: envDir, dir: envDir });
+  }
+  items.push({
+    label: '$(package) showcase',
+    description: '内置示例档案',
+    detail: path.relative(root, showcase),
+    dir: showcase,
+  });
+  items.push({
+    label: '$(folder-opened) 选择其他目录…',
+    description: '需要包含 site.ts / links.ts / posts/',
+    browse: true,
+  });
 
   const picked = await vscode.window.showQuickPick(items, {
     title: '切换档案',
@@ -113,7 +162,8 @@ async function switchProfileCommand(
   disposeServer();
   refreshAll();
   const profile = getProfile();
-  vscode.window.showInformationMessage(`已切换到档案「${profile.kind}」:${profile.dir}`);
+  const dirName = profile.dir.split(/[\\/]/).pop();
+  vscode.window.showInformationMessage(`已切换到档案「${dirName}」:${profile.dir}`);
 }
 
 export function activate(context: vscode.ExtensionContext): void {

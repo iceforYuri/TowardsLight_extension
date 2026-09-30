@@ -25,9 +25,10 @@ export class ConfigProvider implements vscode.TreeDataProvider<vscode.TreeItem> 
     const items: vscode.TreeItem[] = [];
     try {
       const profile = getProfile();
-      const head = new vscode.TreeItem(`档案:${profile.kind}`, vscode.TreeItemCollapsibleState.None);
-      head.tooltip = new vscode.MarkdownString(`\`${profile.dir}\`\n\n点击切换档案`);
-      head.description = profile.dir.split(/[\\/]/).pop();
+      const dirName = profile.dir.split(/[\\/]/).pop();
+      const head = new vscode.TreeItem(`档案:${dirName}`, vscode.TreeItemCollapsibleState.None);
+      head.tooltip = new vscode.MarkdownString(`\`${profile.dir}\`\n\n来源:${profile.kind} · 点击切换档案`);
+      head.description = profile.kind;
       head.iconPath = new vscode.ThemeIcon('folder-opened');
       head.command = { command: 'towardsLight.switchProfile', title: '切换档案' };
       items.push(head);
