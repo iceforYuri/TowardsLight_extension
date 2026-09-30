@@ -1,107 +1,103 @@
-# TowardsLight 博客工具(VS Code 扩展)
+# TowardsLight 博客工具
 
-本地写作与配置工具,不进模板库版本控制(根目录 `.gitignore` 已屏蔽 `editor/`)。
+TowardsLight 博客的本地写作与站点管理扩展：文章、配置、分类、链接、预览，全部收进 VS Code 侧边栏，写作全程不离开编辑器。
+
+![侧边栏全景](image/01-sidebar.png)
+
+## 为什么是插件
+
+这个博客的内容和配置都在文件里：文章是 Markdown，站点配置是 `site.ts`，链接目录是 `links.ts`。手写这些文件不难，难的是写作流程里每一次「开终端、找文件、翻字段、刷浏览器」都在打断状态。这个扩展把整条动线收进编辑器：**侧边栏新建 → 编辑器里写 → 右键插图 → 行内预览**。
 
 ## 功能
 
-**文章管理**(左侧活动栏「博客」图标)
+### 预览控制台
 
-- 文章树:按 草稿 / 已发布 分组,显示日期与分类,点击打开
-- 新建文章:表单填写标题 / slug / 分类 / 标签 / 封面,日期自动,生成到当前档案;
-  封面可直接从电脑选图,自动复制进档案并按相对路径引用
-- 预览:文章树内联按钮(或命令面板 `预览文章`),自动复用或拉起 `npm run dev`,
-  在旁边开 iframe 显示真实渲染,Astro HMR 保存即刷新
-- 插入正文图片:Markdown 编辑器右键菜单,选图(可多选)→ 复制到 `posts/image/<文章名>/`
-  → 光标处插入相对引用
+- **模板 / 档案双绑定**：模板（Astro 工程）与档案（内容包）各自独立选择，自动识别 + 手动覆盖
+- 一键启动预览：在模板目录起 `npm run dev`，档案经环境变量注入；给出预览地址，可面板内打开（iframe 真实渲染）或浏览器打开
+- **server 账本制**：同「模板 + 档案」组合自动复用，端口被占自动顺延；跨会话的孤儿进程按 PID 账本回收
+- 运行中的 server 列在预览区，可停止、可点击打开
 
-**站点配置**(「站点配置」视图)
+![预览控制台](image/02-preview.png)
 
-- 编辑站点信息:基础字段、头像、当前状态、Hero 背景与文字模式、各页背景图、各页文案
-  (pages/pageBackdrops),表单写回 site.ts;图片字段带「选择图片…」按钮,自动复制进档案 images/
-- 新增分类:名称 + 图标选择器(带搜索)+ accent/contrast 色调,写进 categoryMeta
-- 新增链接:分组下拉(可新建组)+ 图标 + featured,追加进 links.ts
-- 新增 Lucide 图标:输入 lucide.dev 上的图标名,自动提取 SVG 补录进 Icon.astro
+### 文章管理
 
-所有写回都是 AST 定位 + 文本级插入,保留文件原有注释、格式和 `as const` 断言。
+- 文章树按草稿 / 已发布分组，显示日期与分类，frontmatter 异常有警告图标
+- **新建文章表单**：slug 由标题自动派生（可改）、分类补全、标签、封面；封面可从电脑选图，自动复制进 `posts/image/<slug>/` 并按相对路径引用
+- **文章预览**：真实 dev server 渲染，HMR 保存即刷新
+- **插入正文图片**：Markdown 右键菜单，多选复制归档 + 光标处插入引用；与 VS Code 原生粘贴同一套目录约定
 
-## 档案解析
+### 站点信息
 
-和 `scripts/use-profile.mjs` 同一套顺序:`SITE_PROFILE_DIR` 环境变量 > `./personal/` > 内置 `showcase`。
-「站点配置」视图顶部显示当前命中的档案。
+卡片式长表单，左侧目录 + scrollspy:站点名 / 作者 / 签名 / 头像 / 当前状态 / 默认主题 / Hero / 各页背景 / 各页文案。
 
-## 使用
+- 图片字段带**实时缩略图**,「选择图片…」自动归档进档案 `images/`
+- 所有写回都是 **AST 级就地修改**,注释、格式、`as const` 断言原样保留
+- **草稿指纹**：未保存的输入在面板重建后恢复；文件在别处变动后旧草稿自动作废，以文件为准
+
+![站点信息](image/03-site-config.png)
+
+### 管理分类
+
+新建 / 编辑双模式，图标选择器（可搜索）、双色池色调、底部胶囊实时预览。分类名是文章引用的 key:**有引用的分类锁定改名与删除**，下拉里标注引用篇数。
+
+![管理分类](image/04-category.png)
+
+### 管理链接
+
+有序模块列表，不是表单：分组分段、行内展开编辑、↑↓ 组内排序、**分组头拖拽排序**、两段式删除；分组可新建 / 改显示名 / 删空组。
+
+![管理链接](image/05-links.png)
+
+### 图标补录
+
+输入 lucide.dev 上的图标名，自动从 lucide-static 提取 SVG 补录进模板的 `Icon.astro`，分类与链接表单立即可用。
+
+## 安装
+
+不上架市场，vsix 直装：
 
 ```bash
-cd editor
-npm install
-npm run build      # esbuild 打包到 dist/
+code --install-extension towards-light-editor-0.6.1.vsix
 ```
 
-调试:在 VS Code 里打开 `editor/` 目录,按 `F5` —— 会启动扩展开发宿主窗口并自动打开博客项目。
+装完 **Reload Window** 生效。要求：工作区是 TowardsLight 博客项目（含 `scripts/use-profile.mjs`)。
 
-安装到日常 VS Code:
+## 档案机制
 
-```bash
-npm run package    # 产出 towards-light-editor-0.1.0.vsix
-code --install-extension towards-light-editor-0.1.0.vsix
-```
+与 `scripts/use-profile.mjs` 同一套解析顺序：`SITE_PROFILE_DIR` > `./personal/` > 内置 `showcase`。点击「档案：xxx」可在扫描到的档案间切换（根目录往下两层），或选择任意自定义目录；选择持久化，重载窗口后仍生效。
 
-## 测试
-
-```bash
-npm test           # 核心读写逻辑(17 项断言,跑在 showcase 副本上,不碰真实档案)
-```
-
-## 结构
+## 图片资产约定
 
 ```
-src/core/        纯逻辑层(不依赖 vscode,可在 Node 下测试)
-  profile.ts     档案解析 + 图片列表
-  frontmatter.ts 文章解析 / 新建文章 frontmatter 生成
-  configAst.ts   site.ts / links.ts 的 AST 读写
-  icons.ts       Icon.astro 图标表读写 + lucide-static 提取
-  textEdit.ts    文本级插入助手
-src/posts.ts     文章树
-src/preview.ts   dev server 管理(账本制)+ iframe 预览
-src/previewView.ts 预览区(模板/档案/启动预览 + 运行中 server)
-src/webviews/    四个表单(新建文章 / 站点信息 / 管理分类 / 新增链接)
-scripts/test-core.mjs
-```
-
-## 二期方向(已记下,未开工)
-
-**文章管理**
-
-- **文章树增强**:现在只有草稿/已发布两组,略显单薄。按分类或标签分组/筛选,快速定位文章
-- **已发布文章元数据编辑**:复用新建表单改 frontmatter(标题/标签/分类/封面)
-- **草稿 ⇄ 发布切换**:文章树上一键切 draft
-- **删除文章**:带确认的删除
-
-**站点配置**
-
-- ~~表单 UI 优化~~(v0.3.0 已完成:卡片分区、分段选择器、图片实时预览、左侧目录)
-- ~~分类修改~~(v0.3.0 已完成:管理分类表单双模式);删除分类待做
-
-**三期方向**
-
-- ~~链接管理~~(v0.6.0 已完成:有序列表 + 行内编辑 + 组内排序 + 删除 + 分组 CRUD)
-
-**明确不做**:重命名 slug、定时发布
-
-## 图片资产约定(v0.2.0 已落地)
-
-```
-personal/
-├── images/                     ← 站点级:头像、Hero/页面背景;junction 服务,绝对路径 /images/...
+<档案>/
+├── images/                     ← 站点级:头像、Hero/页面背景,按 /images/... 引用
 └── posts/
     ├── my-post.md
-    └── image/                  ← 文章级:封面与正文插图统一放这
-        └── my-post/            ← 按文章名归目录,文件名保留原名,撞名自动加 -2 后缀
-            ├── cover.jpg       ← frontmatter: cover: image/my-post/cover.jpg(相对路径)
-            └── benchmark.png   ← 正文: ![描述](image/my-post/benchmark.png)
+    └── image/<my-post>/        ← 文章级:封面与正文插图,按文章名归目录,相对路径引用
 ```
 
-- 复制不移动源文件;正文图不覆盖;不做大文件提醒和压缩
-- 文章页封面双模式(主仓库):`/` 开头走 public junction,否则相对文章文件经 Vite 资产管线解析
-- 工作区 `markdown.copyFiles.destination` 已固化为 `${documentDirName}/image/${documentBaseName}`,
-  原生粘贴与扩展复制落进同一目录规矩
+复制不移动源文件；撞名自动加 `-2` 后缀，不覆盖（正文可能正引用旧图）。
+
+## 开发
+
+```bash
+npm install
+npm run build      # esbuild 双产物:dist/extension.js + dist/core.mjs
+npm test           # 核心读写逻辑(26 项断言,跑在 showcase 副本上)
+npm run package    # 产出 vsix
+```
+
+调试：在 VS Code 里打开 `editor/` 目录按 `F5`,启动扩展开发宿主并自动打开博客项目。
+
+```
+src/core/        纯逻辑层(不依赖 vscode,Node 下可测)
+src/webviews/    四个表单 webview(共享一套设计系统)
+src/preview.ts   dev server 账本与 iframe 面板
+src/posts.ts     文章树
+```
+
+## Roadmap
+
+- 文章树增强：按分类/标签分组筛选
+- 已发布文章的元数据编辑、草稿 ⇄ 发布切换、删除文章
+- 明确不做：重命名 slug、定时发布
