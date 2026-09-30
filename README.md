@@ -62,8 +62,9 @@ src/core/        纯逻辑层(不依赖 vscode,可在 Node 下测试)
   icons.ts       Icon.astro 图标表读写 + lucide-static 提取
   textEdit.ts    文本级插入助手
 src/posts.ts     文章树
-src/preview.ts   dev server 管理 + iframe 预览
-src/webviews/    四个表单(新建文章 / 站点信息 / 新增分类 / 新增链接)
+src/preview.ts   dev server 管理(账本制)+ iframe 预览
+src/previewView.ts 预览区(模板/档案/启动预览 + 运行中 server)
+src/webviews/    四个表单(新建文章 / 站点信息 / 管理分类 / 新增链接)
 scripts/test-core.mjs
 ```
 
@@ -78,9 +79,12 @@ scripts/test-core.mjs
 
 **站点配置**
 
-- **表单 UI 优化**:分组排版更精致;头像等图片字段加实时预览
-- **链接管理**:links.ts 的列表、修改、删除(v1 只做了新增)
-- **分类管理**:已有分类的修改、删除(v1 只做了新增)
+- ~~表单 UI 优化~~(v0.3.0 已完成:卡片分区、分段选择器、图片实时预览、左侧目录)
+- ~~分类修改~~(v0.3.0 已完成:管理分类表单双模式);删除分类待做
+
+**三期方向**
+
+- **链接管理**:links.ts 的列表、修改、删除(v1 只做了新增),并做配置体验优化
 
 **明确不做**:重命名 slug、定时发布
 

@@ -254,6 +254,25 @@ export function addCategory(siteFile: string, cat: CategoryMeta): void {
   fs.writeFileSync(siteFile, text, 'utf8');
 }
 
+/** 修改已有分类的图标/色调/描述;名称是 key,不可改。返回实际改动数量 */
+export function updateCategory(
+  siteFile: string,
+  name: string,
+  patch: Partial<Omit<CategoryMeta, 'name'>>,
+): number {
+  const project = newProject();
+  const { sf, meta } = categoryMetaObject(siteFile, project);
+  const p = meta.getProperty(name) ?? meta.getProperty(`'${name}'`);
+  if (!p || !Node.isPropertyAssignment(p)) throw new Error(`分类「${name}」不存在`);
+  const o = objectLiteralOf(p.getInitializer(), name);
+  let changed = 0;
+  if (patch.icon !== undefined && writeStringProp(o, 'icon', patch.icon)) changed++;
+  if (patch.tone !== undefined && writeStringProp(o, 'tone', patch.tone)) changed++;
+  if (patch.description !== undefined && writeStringProp(o, 'description', patch.description)) changed++;
+  if (changed) sf.saveSync();
+  return changed;
+}
+
 // ─────────────────────────── links.ts ───────────────────────────
 
 export interface NewLink {

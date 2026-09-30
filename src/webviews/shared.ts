@@ -245,8 +245,25 @@ button.small:active { transform: scale(0.96); }
 .toast.on { opacity: 1; transform: none; }
 .toast svg { width: 15px; height: 15px; stroke: var(--ok); stroke-width: 2.4; fill: none; }
 
+/* ---- 左侧目录(长表单) ---- */
+html { scroll-behavior: smooth; }
+.layout { display: flex; gap: 26px; align-items: flex-start; }
+.main { flex: 1; min-width: 0; }
+.toc { position: sticky; top: 20px; flex: 0 0 150px; padding-top: 2px; animation: rise 0.55s var(--ease) both; }
+.toc a {
+  display: flex; align-items: baseline; gap: 8px; padding: 6px 11px; margin: 2px 0;
+  border-radius: 7px; border-left: 2px solid transparent;
+  color: var(--muted); text-decoration: none; font-size: 12px;
+  transition: color 0.18s var(--ease), background 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+.toc a .ti { font-family: var(--mono); font-size: 10px; opacity: 0.55; }
+.toc a:hover { color: var(--fg); background: var(--raise-2); }
+.toc a.on { color: var(--accent); border-left-color: var(--accent); background: var(--accent-soft); }
+@media (max-width: 780px) { .toc { display: none; } }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  html { scroll-behavior: auto; }
 }
 </style>
 </head>
@@ -399,10 +416,10 @@ export const ICON_PICKER_HTML = `
 <div class="icon-grid" id="iconGrid"></div>
 `;
 
-/** 卡片分区外壳:序号 + 标题 + 可选说明 */
-export function cardHtml(idx: string, title: string, hint: string, inner: string): string {
+/** 卡片分区外壳:序号 + 标题 + 可选说明;id 供目录锚点 */
+export function cardHtml(id: string, idx: string, title: string, hint: string, inner: string): string {
   return `
-<section class="card">
+<section class="card" id="${id}">
   <div class="card-head">
     <span class="card-idx">${idx}</span>
     <div>

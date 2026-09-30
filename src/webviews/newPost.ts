@@ -59,8 +59,8 @@ function body(): string {
 <h1>新建文章</h1>
 <p class="sub">生成到当前档案的 posts 目录,归档、标签、分类页自动收录。</p>
 
-${cardHtml('01', '内容', '标题、分类与摘要', main)}
-${cardHtml('02', '封面', '可选;没有封面的文章同样成立', cover)}
+${cardHtml('c1', '01', '内容', '标题、分类与摘要', main)}
+${cardHtml('c2', '02', '封面', '可选;没有封面的文章同样成立', cover)}
 
 <div class="error" id="error"></div>
 <div class="actions"><button class="primary" id="submit">创建并打开</button></div>

@@ -89,7 +89,7 @@
       },
       {
         "command": "towardsLight.addCategory",
-        "title": "新增分类",
+        "title": "管理分类",
         "icon": "$(folder)"
       },
       {

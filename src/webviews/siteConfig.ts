@@ -99,15 +99,27 @@ ${imageRowHtml(`bd_${key}`, '留空则无背景图')}`,
 <h1>站点信息</h1>
 <p class="sub">写回当前档案的 site.ts,保留注释与格式;dev server 会热更新,保存后即可在预览里看到效果。</p>
 
-${cardHtml('01', '基本', '站点名称、作者与对外展示的签名', basic)}
-${cardHtml('02', '头像', '出现在首页 Hero 与页脚', avatar)}
-${cardHtml('03', '当前状态', '首页 Hero 上方的状态徽章', status)}
-${cardHtml('04', '首页 Hero', '背景图与图上文字的明暗处理', hero)}
-${cardHtml('05', '页面背景', '各内容页顶部视觉区域的背景图', backdrops)}
-${cardHtml('06', '页面文案', '各内容页的标题与描述', pages)}
+<div class="layout">
+<nav class="toc">
+  <a href="#c1"><span class="ti">01</span>基本</a>
+  <a href="#c2"><span class="ti">02</span>头像</a>
+  <a href="#c3"><span class="ti">03</span>当前状态</a>
+  <a href="#c4"><span class="ti">04</span>首页 Hero</a>
+  <a href="#c5"><span class="ti">05</span>页面背景</a>
+  <a href="#c6"><span class="ti">06</span>页面文案</a>
+</nav>
+<div class="main">
+${cardHtml('c1', '01', '基本', '站点名称、作者与对外展示的签名', basic)}
+${cardHtml('c2', '02', '头像', '出现在首页 Hero 与页脚', avatar)}
+${cardHtml('c3', '03', '当前状态', '首页 Hero 上方的状态徽章', status)}
+${cardHtml('c4', '04', '首页 Hero', '背景图与图上文字的明暗处理', hero)}
+${cardHtml('c5', '05', '页面背景', '各内容页顶部视觉区域的背景图', backdrops)}
+${cardHtml('c6', '06', '页面文案', '各内容页的标题与描述', pages)}
 
 <div class="error" id="error"></div>
 <div class="actions"><button class="primary" id="submit">保存</button></div>
+</div>
+</div>
 `;
 }
 
@@ -156,6 +168,20 @@ function segInit(segId, inputId, fallback) {
 segInit('statusSeg', 'statusMode', 'building');
 segInit('heroTextModeSeg', 'heroTextMode', 'auto');
 segInit('themeSeg', 'themeDefault', 'system');
+
+// 左侧目录 scrollspy
+const tocLinks = [...document.querySelectorAll('.toc a')];
+const io = new IntersectionObserver((entries) => {
+  for (const en of entries) {
+    if (en.isIntersecting) {
+      tocLinks.forEach((a) => a.classList.toggle('on', a.hash === '#' + en.target.id));
+    }
+  }
+}, { rootMargin: '-15% 0px -70% 0px' });
+tocLinks.forEach((a) => {
+  const sec = document.querySelector(a.hash);
+  if (sec) io.observe(sec);
+});
 
 window.addEventListener('message', (e) => {
   const msg = e.data;

@@ -1,15 +1,20 @@
 import * as vscode from 'vscode';
-import { addCategory, readIcons } from '../core';
+import { addCategory, readCategories, readIcons, updateCategory } from '../core';
 import { getProfile } from '../util';
 import { ICON_PICKER_HTML, ICON_PICKER_SCRIPT, pageShell, SCRIPT_PREAMBLE } from './shared';
 
 function body(): string {
   return `
 <div class="kicker">Towards Light · Studio</div>
-<h1>新增分类</h1>
-<p class="sub">写进 site.ts 的 categoryMeta;文章 frontmatter 里用同名 category 即归入。</p>
+<h1>管理分类</h1>
+<p class="sub">写进 site.ts 的 categoryMeta;文章 frontmatter 里用同名 category 即归入。分类名是文章的归属 key,创建后不可改。</p>
 
 <section class="card">
+  <label class="f">选择分类</label>
+  <select id="mode">
+    <option value="__new__">＋ 新建分类</option>
+  </select>
+
   <label class="f">分类名 <span class="req">*</span></label>
   <input type="text" id="name" placeholder="如:读书" autofocus>
 
@@ -46,7 +51,14 @@ function script(): string {
     ICON_PICKER_SCRIPT +
     `
 const TONE_COLOR = { accent: '#bc6353', contrast: '#5d827a' };
+let categories = [];
 let tone = 'accent';
+
+function setTone(t) {
+  tone = t;
+  document.querySelectorAll('.tone').forEach((el) => el.classList.toggle('sel', el.dataset.tone === t));
+  syncPreview();
+}
 function syncPreview() {
   const name = $('name').value.trim() || '分类名';
   $('pcName').textContent = name;
@@ -57,30 +69,73 @@ function syncPreview() {
   $('previewChip').style.color = TONE_COLOR[tone];
 }
 function onIconChange() { syncPreview(); }
+
+function editing() { return $('mode').value !== '__new__'; }
+function applyMode() {
+  const isEdit = editing();
+  $('name').disabled = isEdit;
+  $('submit').textContent = isEdit ? '保存修改' : '添加';
+  if (isEdit) {
+    const c = categories.find((x) => x.name === $('mode').value);
+    if (c) {
+      $('name').value = c.name;
+      $('description').value = c.description;
+      selectedIcon = c.icon;
+      $('iconValue').value = c.icon;
+      setTone(c.tone || 'accent');
+      renderIcons();
+    }
+  } else {
+    $('name').value = '';
+    $('description').value = '';
+    selectedIcon = '';
+    $('iconValue').value = '';
+    setTone('accent');
+    renderIcons();
+  }
+  syncPreview();
+}
+
 document.querySelectorAll('.tone').forEach((el) => {
-  el.addEventListener('click', () => {
-    document.querySelectorAll('.tone').forEach((t) => t.classList.remove('sel'));
-    el.classList.add('sel');
-    tone = el.dataset.tone;
-    syncPreview();
-  });
+  el.addEventListener('click', () => setTone(el.dataset.tone));
 });
 $('name').addEventListener('input', syncPreview);
+$('mode').addEventListener('change', applyMode);
+
 window.addEventListener('message', (e) => {
   const msg = e.data;
   if (msg.type === 'init') {
     icons = msg.icons;
+    categories = msg.categories;
+    const sel = $('mode');
+    sel.querySelectorAll('option[data-cat]').forEach((o) => o.remove());
+    for (const c of categories) {
+      const o = document.createElement('option');
+      o.value = c.name;
+      o.textContent = c.name;
+      o.dataset.cat = '1';
+      sel.appendChild(o);
+    }
     renderIcons();
     restoreState();
-    syncPreview();
+    applyMode();
+  } else if (msg.type === 'saved') {
+    toast(msg.mode === 'edit' ? '分类已更新' : '分类已加入 site.ts');
+    showError('');
+    if (msg.mode === 'create') {
+      $('mode').value = '__new__';
+      applyMode();
+    }
   } else if (msg.type === 'error') {
     showError(msg.message);
   }
 });
+
 $('submit').addEventListener('click', () => {
   showError('');
   vscode.postMessage({
     type: 'submit',
+    mode: editing() ? 'edit' : 'create',
     value: {
       name: $('name').value.trim(),
       icon: $('iconValue').value,
@@ -98,23 +153,37 @@ export function openCategoryForm(): void {
   const profile = getProfile();
   const panel = vscode.window.createWebviewPanel(
     'towardsLightCategory',
-    '新增分类',
+    '管理分类',
     vscode.ViewColumn.One,
     { enableScripts: true, retainContextWhenHidden: true },
   );
-  panel.webview.html = pageShell('新增分类', body(), script(), panel.webview.cspSource);
+  panel.webview.html = pageShell('管理分类', body(), script(), panel.webview.cspSource);
+  const sendInit = () =>
+    panel.webview.postMessage({
+      type: 'init',
+      icons: readIcons(profile.iconFile),
+      categories: readCategories(profile.siteFile),
+    });
   panel.webview.onDidReceiveMessage((msg) => {
     try {
       if (msg.type === 'ready') {
-        panel.webview.postMessage({ type: 'init', icons: readIcons(profile.iconFile) });
+        void sendInit();
       } else if (msg.type === 'submit') {
         const v = msg.value;
         if (!v.name) throw new Error('分类名不能为空');
         if (!v.icon) throw new Error('请选一个图标');
         if (!v.description) throw new Error('描述不能为空');
-        addCategory(profile.siteFile, v);
-        panel.dispose();
-        vscode.window.showInformationMessage(`分类「${v.name}」已加入 site.ts`);
+        if (msg.mode === 'edit') {
+          updateCategory(profile.siteFile, v.name, {
+            icon: v.icon,
+            tone: v.tone,
+            description: v.description,
+          });
+        } else {
+          addCategory(profile.siteFile, v);
+        }
+        void sendInit();
+        panel.webview.postMessage({ type: 'saved', mode: msg.mode });
       }
     } catch (e) {
       panel.webview.postMessage({ type: 'error', message: (e as Error).message });

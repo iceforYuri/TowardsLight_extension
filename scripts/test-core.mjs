@@ -84,6 +84,16 @@ assert.deepEqual(cats2.at(-1), { name: '读书', icon: 'book-open', tone: 'accen
 assert.throws(() => core.addCategory(siteFile, cats2.at(-1)), /已存在/);
 ok('addCategory 追加且拒绝重名');
 
+const catChanged = core.updateCategory(siteFile, '读书', { description: '改写后的描述', tone: 'contrast' });
+assert.equal(catChanged, 2);
+const cats3 = core.readCategories(siteFile);
+const edited = cats3.find((c) => c.name === '读书');
+assert.equal(edited.description, '改写后的描述');
+assert.equal(edited.tone, 'contrast');
+assert.equal(edited.icon, 'book-open', '未触碰的 icon 不应变化');
+assert.throws(() => core.updateCategory(siteFile, '不存在的分类', { icon: 'x' }), /不存在/);
+ok('updateCategory 修改已有分类并可重读');
+
 const siteText = fs.readFileSync(siteFile, 'utf8');
 const catBlock = siteText.match(/读书: \{[\s\S]*?\},/);
 assert.ok(catBlock && catBlock[0].includes("\n      icon: 'book-open',"), '新增分类应匹配现有缩进风格');
