@@ -300,24 +300,38 @@ function showError(text) {
   el.classList.remove('shake');
   if (text) requestAnimationFrame(() => el.classList.add('shake'));
 }
-// 表单状态持久化:输入即存,面板被重建(Reload Window 等)后恢复
+// 表单状态持久化:输入即存,面板被重建(Reload Window 等)后恢复。
+// __fp 是文件值指纹,由表单在 init 时写入;文件在别处变动后指纹失配,草稿作废
 function collectState() {
   const state = {};
   document.querySelectorAll('input[id], textarea[id], select[id]').forEach((el) => {
     state[el.id] = el.type === 'checkbox' ? el.checked : el.value;
   });
+  const prev = vscode.getState();
+  if (prev && prev.__fp) state.__fp = prev.__fp;
   return state;
 }
 function restoreState() {
   const state = vscode.getState();
   if (!state) return;
   for (const [id, val] of Object.entries(state)) {
+    if (id.startsWith('__')) continue;
     const el = $(id);
     if (el) el[el.type === 'checkbox' ? 'checked' : 'value'] = val;
   }
   document.querySelectorAll('input[id], textarea[id], select[id]').forEach((el) => {
     el.dispatchEvent(new Event('input', { bubbles: true }));
   });
+}
+// 指纹守卫:state 与当前文件值同代才恢复,否则清掉(返回是否恢复)
+function restoreStateIfFresh(fp) {
+  const state = vscode.getState();
+  if (state && state.__fp === fp) {
+    restoreState();
+    return true;
+  }
+  if (state) vscode.setState({ __fp: fp });
+  return false;
 }
 document.addEventListener('input', () => vscode.setState(collectState()));
 document.addEventListener('change', () => vscode.setState(collectState()));

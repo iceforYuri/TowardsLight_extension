@@ -202,7 +202,8 @@ window.addEventListener('message', (e) => {
         $('pg_' + k + '_description').value = pg.description ?? '';
       }
     }
-    restoreState();
+    // 文件值打底;草稿只在文件没变过时恢复,否则以文件为准
+    restoreStateIfFresh(JSON.stringify(v));
     THUMBS.forEach(bindThumb);
   } else if (msg.type === 'imagePicked') {
     $(msg.field).value = msg.ref;
