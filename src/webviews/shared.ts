@@ -43,7 +43,7 @@ body {
   color: var(--fg); background: var(--bg);
   font-family: var(--sans); font-size: 13px; line-height: 1.6;
 }
-.wrap { max-width: 660px; margin: 0 auto; }
+.wrap { max-width: 880px; margin: 0 auto; }
 
 /* ---- 页眉 ---- */
 .kicker {
@@ -56,7 +56,7 @@ h1 {
   font-family: var(--serif); font-size: 30px; font-weight: 600;
   line-height: 1.25; letter-spacing: 0.01em; margin: 0 0 8px;
 }
-.sub { color: var(--muted); font-size: 12.5px; margin: 0 0 30px; max-width: 52ch; }
+.sub { color: var(--muted); font-size: 12.5px; margin: 0 0 30px; }
 
 /* ---- 卡片分区 ---- */
 .card {
@@ -232,6 +232,9 @@ button.small {
 }
 button.small:hover { background: var(--vscode-button-secondaryHoverBackground, color-mix(in srgb, var(--fg) 12%, transparent)); }
 button.small:active { transform: scale(0.96); }
+button.small.danger { color: var(--err); }
+button.small.danger:hover { background: color-mix(in srgb, var(--err) 14%, transparent); }
+button.small:disabled { opacity: 0.45; cursor: default; transform: none; }
 .toast {
   position: fixed; right: 18px; bottom: 18px; z-index: 9;
   display: flex; align-items: center; gap: 9px;

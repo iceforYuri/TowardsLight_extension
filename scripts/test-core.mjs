@@ -84,6 +84,12 @@ assert.deepEqual(cats2.at(-1), { name: '读书', icon: 'book-open', tone: 'accen
 assert.throws(() => core.addCategory(siteFile, cats2.at(-1)), /已存在/);
 ok('addCategory 追加且拒绝重名');
 
+const siteTextEarly = fs.readFileSync(siteFile, 'utf8');
+const catBlock = siteTextEarly.match(/读书: \{[\s\S]*?\},/);
+assert.ok(catBlock && catBlock[0].includes("\n      icon: 'book-open',"), '新增分类应匹配现有缩进风格');
+ok('新增分类的格式与现有条目一致');
+console.log('\n新增分类写入效果:\n' + catBlock[0]);
+
 const catChanged = core.updateCategory(siteFile, '读书', { description: '改写后的描述', tone: 'contrast' });
 assert.equal(catChanged, 2);
 const cats3 = core.readCategories(siteFile);
@@ -94,23 +100,26 @@ assert.equal(edited.icon, 'book-open', '未触碰的 icon 不应变化');
 assert.throws(() => core.updateCategory(siteFile, '不存在的分类', { icon: 'x' }), /不存在/);
 ok('updateCategory 修改已有分类并可重读');
 
-const siteText = fs.readFileSync(siteFile, 'utf8');
-const catBlock = siteText.match(/读书: \{[\s\S]*?\},/);
-assert.ok(catBlock && catBlock[0].includes("\n      icon: 'book-open',"), '新增分类应匹配现有缩进风格');
-ok('新增分类的格式与现有条目一致');
-console.log('\n新增分类写入效果:\n' + catBlock[0]);
+core.renameCategory(siteFile, '读书', '阅读');
+assert.ok(core.readCategories(siteFile).some((c) => c.name === '阅读'), '改名后新 key 可读');
+assert.ok(!core.readCategories(siteFile).some((c) => c.name === '读书'), '旧 key 应消失');
+assert.throws(() => core.renameCategory(siteFile, '阅读', '前端'), /已存在/);
+core.deleteCategory(siteFile, '阅读');
+assert.ok(!core.readCategories(siteFile).some((c) => c.name === '阅读'), '删除后条目应消失');
+assert.equal(core.readCategories(siteFile).length, 5);
+ok('renameCategory / deleteCategory 迁移与删除 key');
 
 // ── links.ts ──
 const groups = core.readLinkGroups(linksFile);
 assert.equal(groups.length, 8);
-assert.ok(groups.includes('Code'));
-ok('readLinkGroups 读出 8 个分组');
+assert.deepEqual(groups[0], { id: 'code', label: 'Code', description: '代码托管与开源项目' });
+ok('readLinkGroups 读出 8 个对象化分组(id/label/description)');
 
 core.addLink(linksFile, {
   title: 'Example',
   description: '测试链接',
   href: 'https://example.com',
-  group: 'Code',
+  group: 'code',
   icon: 'github',
   external: true,
   featured: true,
@@ -125,10 +134,12 @@ core.addLink(linksFile, {
   title: 'Pinia',
   description: '状态管理',
   href: 'https://pinia.vuejs.org',
-  group: 'Reading',
+  group: 'reading',
+  groupLabel: 'Reading',
 });
 linksText = fs.readFileSync(linksFile, 'utf8');
-assert.ok(core.readLinkGroups(linksFile).includes('Reading'), '新分组应补进 linkGroups');
+const groups2 = core.readLinkGroups(linksFile);
+assert.ok(groups2.some((g) => g.id === 'reading' && g.label === 'Reading'), '新分组应以对象形式补进 linkGroups');
 assert.ok(!linksText.includes("title: 'Pinia',\n    icon"), '无图标时不写 icon 行');
 assert.ok(!/Pinia[\s\S]*?external/.test(linksText.split('Pinia')[1]?.slice(0, 200) ?? ''), 'external: false 时不写 external 行');
 ok('addLink 新建分组 + 可选字段按需输出');

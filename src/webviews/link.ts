@@ -28,7 +28,13 @@ function body(): string {
 
   <label class="f">分组 <span class="req">*</span></label>
   <select id="group"></select>
-  <input type="text" id="newGroup" placeholder="新分组名,如:Reading" style="display:none;margin-top:6px">
+  <div id="newGroupRow" style="display:none;margin-top:8px" class="row">
+    <div>
+      <input type="text" id="newGroupId" placeholder="分组 id,英文小写,如 reading">
+      <div class="hint">id 会进类型定义,只能小写字母/数字/连字符</div>
+    </div>
+    <div><input type="text" id="newGroupLabel" placeholder="显示名,如 Reading"></div>
+  </div>
 
   ${ICON_PICKER_HTML}
   <div class="hint">图标可选,不选就用默认链接样式</div>
@@ -60,8 +66,8 @@ window.addEventListener('message', (e) => {
     const sel = $('group');
     for (const g of msg.groups) {
       const o = document.createElement('option');
-      o.value = g;
-      o.textContent = g;
+      o.value = g.id;
+      o.textContent = g.label + ' · ' + g.id;
       sel.appendChild(o);
     }
     const create = document.createElement('option');
@@ -69,13 +75,22 @@ window.addEventListener('message', (e) => {
     create.textContent = '＋ 新建分组…';
     sel.appendChild(create);
     restoreState();
-    $('newGroup').style.display = $('group').value === '__new__' ? 'block' : 'none';
+    $('newGroupRow').style.display = $('group').value === '__new__' ? 'block' : 'none';
+  } else if (msg.type === 'saved') {
+    vscode.setState({});
+    toast('链接已加入 links.ts');
+    showError('');
+    $('title').value = '';
+    $('href').value = '';
+    $('description').value = '';
+    $('status').value = '';
+    $('featured').checked = false;
   } else if (msg.type === 'error') {
     showError(msg.message);
   }
 });
 $('group').addEventListener('change', (e) => {
-  $('newGroup').style.display = e.target.value === '__new__' ? 'block' : 'none';
+  $('newGroupRow').style.display = e.target.value === '__new__' ? 'block' : 'none';
 });
 $('submit').addEventListener('click', () => {
   showError('');
@@ -86,7 +101,8 @@ $('submit').addEventListener('click', () => {
       title: $('title').value.trim(),
       href: $('href').value.trim(),
       description: $('description').value.trim(),
-      group: isNew ? $('newGroup').value.trim() : $('group').value,
+      group: isNew ? $('newGroupId').value.trim() : $('group').value,
+      groupLabel: isNew ? $('newGroupLabel').value.trim() : undefined,
       icon: $('iconValue').value || undefined,
       external: $('external').checked,
       featured: $('featured').checked,
@@ -122,8 +138,14 @@ export function openLinkForm(): void {
         if (!v.href) throw new Error('URL 不能为空');
         if (!v.description) throw new Error('说明不能为空');
         if (!v.group) throw new Error('分组不能为空');
+        if (v.groupLabel !== undefined) {
+          if (!/^[a-z0-9][a-z0-9-]*$/.test(v.group)) {
+            throw new Error('分组 id 只能是小写字母、数字和连字符');
+          }
+          if (!v.groupLabel) throw new Error('新分组需要显示名');
+        }
         addLink(profile.linksFile, v);
-        panel.dispose();
+        panel.webview.postMessage({ type: 'saved' });
         vscode.window.showInformationMessage(`链接「${v.title}」已加入 links.ts`);
       }
     } catch (e) {

@@ -39,8 +39,9 @@ function body(): string {
   <div><label class="f">作者</label><input type="text" id="author"></div>
 </div>
 <label class="f">签名(长)</label><textarea id="bio"></textarea>
-<label class="f">简介(短)</label><textarea id="shortBio"></textarea>
-<div class="hint">出现在页脚和首页介绍</div>
+<div class="hint">首页 Hero 的个人介绍,可以写两三句</div>
+<label class="f">站点签名(短)</label><input type="text" id="shortBio">
+<div class="hint">一句话,用在浏览器标题后缀和页脚署名</div>
 <div class="row">
   <div><label class="f">邮箱</label><input type="text" id="email"></div>
   <div><label class="f">站点 URL</label><input type="text" id="siteUrl"></div>
@@ -55,8 +56,10 @@ function body(): string {
   const avatar = `
 <label class="f">头像路径</label>
 ${imageRowHtml('avatar', '/images/avatar.svg')}
+<div class="hint">图片会复制到档案的 images/ 目录,按 /images/… 引用</div>
 <label class="f">裁切焦点</label>
-<input type="text" id="avatarPosition" placeholder="object-position,竖向人像建议 center 30%">`;
+<input type="text" id="avatarPosition" placeholder="默认 center center">
+<div class="hint">头像以正方形裁切显示。人物照如果脸偏上,填 center 20% 让焦点上移;横向图片填 left center / right center 决定保留哪一侧。语法同 CSS object-position</div>`;
 
   const status = `
 <input type="hidden" id="statusMode">
@@ -208,6 +211,7 @@ window.addEventListener('message', (e) => {
   } else if (msg.type === 'saved') {
     $('submit').disabled = false;
     $('submit').textContent = '保存';
+    vscode.setState({});
     toast('已写回 site.ts(' + msg.changed + ' 个字段)');
     showError('');
   } else if (msg.type === 'error') {

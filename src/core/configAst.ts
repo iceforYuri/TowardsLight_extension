@@ -273,29 +273,71 @@ export function updateCategory(
   return changed;
 }
 
-// ─────────────────────────── links.ts ───────────────────────────
+/** 删除分类条目(调用方负责确保没有文章引用) */
+export function deleteCategory(siteFile: string, name: string): void {
+  const project = newProject();
+  const { sf, meta } = categoryMetaObject(siteFile, project);
+  const p = meta.getProperty(name) ?? meta.getProperty(`'${name}'`);
+  if (!p || !Node.isPropertyAssignment(p)) throw new Error(`分类「${name}」不存在`);
+  p.remove();
+  sf.saveSync();
+}
+
+/** 分类改名(迁移 meta 的 key;调用方负责确保没有文章引用旧名) */
+export function renameCategory(siteFile: string, oldName: string, newName: string): void {
+  const project = newProject();
+  const { sf, meta } = categoryMetaObject(siteFile, project);
+  const p = meta.getProperty(oldName) ?? meta.getProperty(`'${oldName}'`);
+  if (!p || !Node.isPropertyAssignment(p)) throw new Error(`分类「${oldName}」不存在`);
+  if (meta.getProperty(newName) ?? meta.getProperty(`'${newName}'`)) {
+    throw new Error(`分类「${newName}」已存在`);
+  }
+  p.getNameNode().replaceWithText(propName(newName));
+  sf.saveSync();
+}
 
 export interface NewLink {
   title: string;
   description: string;
   href: string;
+  /** linkGroups 里声明过的 id */
   group: string;
+  /** 新建分组时的显示名(缺省用 id) */
+  groupLabel?: string;
   icon?: string;
   external?: boolean;
   featured?: boolean;
   status?: string;
 }
 
-export function readLinkGroups(linksFile: string): string[] {
+// ─────────────────────────── links.ts ───────────────────────────
+
+export interface LinkGroup {
+  id: string;
+  label: string;
+  description: string;
+}
+
+/** 读取链接分组(linkGroups 是对象数组:{id, label, description}) */
+export function readLinkGroups(linksFile: string): LinkGroup[] {
   const sf = newProject().addSourceFileAtPath(linksFile);
   const decl = sf.getVariableDeclaration('linkGroups');
   if (!decl) return [];
   const arr = unwrapAs(decl.getInitializer());
   if (!arr || !Node.isArrayLiteralExpression(arr)) return [];
-  return arr.getElements().filter(Node.isStringLiteral).map((e) => e.getLiteralValue());
+  const out: LinkGroup[] = [];
+  for (const el of arr.getElements()) {
+    if (!Node.isObjectLiteralExpression(el)) continue;
+    out.push({
+      id: readStringProp(el, 'id') ?? '',
+      label: readStringProp(el, 'label') ?? '',
+      description: readStringProp(el, 'description') ?? '',
+    });
+  }
+  return out.filter((g) => g.id);
 }
 
-/** 追加一条链接;分组名是新的时,一并补进 linkGroups */
+/** 追加一条链接;分组 id 是新的时,一并补进 linkGroups(对象形式) */
 export function addLink(linksFile: string, link: NewLink): void {
   const project = newProject();
   const sf = project.addSourceFileAtPath(linksFile);
@@ -307,9 +349,14 @@ export function addLink(linksFile: string, link: NewLink): void {
   if (!groupsArr || !Node.isArrayLiteralExpression(groupsArr)) {
     throw new Error('linkGroups 不是数组字面量,文件结构可能已被手动改过');
   }
-  const groups = groupsArr.getElements().filter(Node.isStringLiteral).map((e) => e.getLiteralValue());
+  const groups = readLinkGroups(linksFile).map((g) => g.id);
   if (!groups.includes(link.group)) {
-    text = insertIntoLiteral(text, groupsArr, `  '${esc(link.group)}'`);
+    const label = link.groupLabel || link.group;
+    text = insertIntoLiteral(
+      text,
+      groupsArr,
+      `  { id: '${esc(link.group)}', label: '${esc(label)}', description: '${esc(label)}' }`,
+    );
   }
 
   // linkGroups 可能改动了文本,基于新文本重新解析再定位 techLinks

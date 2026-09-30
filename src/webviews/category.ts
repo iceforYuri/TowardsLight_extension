@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { addCategory, readCategories, readIcons, updateCategory } from '../core';
+import { addCategory, deleteCategory, listPosts, readCategories, readIcons, renameCategory, updateCategory } from '../core';
 import { getProfile } from '../util';
 import { ICON_PICKER_HTML, ICON_PICKER_SCRIPT, pageShell, SCRIPT_PREAMBLE } from './shared';
 
@@ -35,13 +35,22 @@ function body(): string {
   <label class="f">描述 <span class="req">*</span></label>
   <input type="text" id="description" placeholder="一句话说明这个分类装什么">
 
+  <div id="renameRow" style="display:none">
+    <label class="f">改名为</label>
+    <input type="text" id="renameTo" placeholder="留空则不改名">
+    <div class="hint" id="refHint"></div>
+  </div>
+
   <div class="preview-chip" id="previewChip">
     <span id="pcIcon"></span><span class="pc-name" id="pcName">分类名</span>
   </div>
 </section>
 
 <div class="error" id="error"></div>
-<div class="actions"><button class="primary" id="submit">添加</button></div>
+<div class="actions">
+  <button class="primary" id="submit">添加</button>
+  <button class="small danger" id="delete" style="display:none">删除分类</button>
+</div>
 `;
 }
 
@@ -52,6 +61,7 @@ function script(): string {
     `
 const TONE_COLOR = { accent: '#bc6353', contrast: '#5d827a' };
 let categories = [];
+let refCounts = {};
 let tone = 'accent';
 
 function setTone(t) {
@@ -75,8 +85,18 @@ function applyMode() {
   const isEdit = editing();
   $('name').disabled = isEdit;
   $('submit').textContent = isEdit ? '保存修改' : '添加';
+  $('renameRow').style.display = isEdit ? 'block' : 'none';
+  $('delete').style.display = isEdit ? '' : 'none';
   if (isEdit) {
-    const c = categories.find((x) => x.name === $('mode').value);
+    const name = $('mode').value;
+    const c = categories.find((x) => x.name === name);
+    const refs = refCounts[name] ?? 0;
+    const locked = refs > 0;
+    $('renameTo').disabled = locked;
+    $('delete').disabled = locked;
+    $('refHint').textContent = locked
+      ? refs + ' 篇文章正在引用此分类,改名与删除不可用'
+      : '无文章引用,可改名或删除';
     if (c) {
       $('name').value = c.name;
       $('description').value = c.description;
@@ -88,6 +108,7 @@ function applyMode() {
   } else {
     $('name').value = '';
     $('description').value = '';
+    $('renameTo').value = '';
     selectedIcon = '';
     $('iconValue').value = '';
     setTone('accent');
@@ -107,12 +128,13 @@ window.addEventListener('message', (e) => {
   if (msg.type === 'init') {
     icons = msg.icons;
     categories = msg.categories;
+    refCounts = msg.refCounts ?? {};
     const sel = $('mode');
     sel.querySelectorAll('option[data-cat]').forEach((o) => o.remove());
     for (const c of categories) {
       const o = document.createElement('option');
       o.value = c.name;
-      o.textContent = c.name;
+      o.textContent = c.name + ((refCounts[c.name] ?? 0) > 0 ? '(' + refCounts[c.name] + ' 篇)' : '');
       o.dataset.cat = '1';
       sel.appendChild(o);
     }
@@ -120,12 +142,13 @@ window.addEventListener('message', (e) => {
     restoreState();
     applyMode();
   } else if (msg.type === 'saved') {
-    toast(msg.mode === 'edit' ? '分类已更新' : '分类已加入 site.ts');
+    vscode.setState({});
+    toast(msg.mode === 'edit' ? '分类已更新' : msg.mode === 'delete' ? '分类已删除' : '分类已加入 site.ts');
     showError('');
-    if (msg.mode === 'create') {
+    if (msg.mode !== 'edit') {
       $('mode').value = '__new__';
-      applyMode();
     }
+    applyMode();
   } else if (msg.type === 'error') {
     showError(msg.message);
   }
@@ -138,11 +161,16 @@ $('submit').addEventListener('click', () => {
     mode: editing() ? 'edit' : 'create',
     value: {
       name: $('name').value.trim(),
+      renameTo: $('renameTo').value.trim(),
       icon: $('iconValue').value,
       tone,
       description: $('description').value.trim(),
     },
   });
+});
+$('delete').addEventListener('click', () => {
+  showError('');
+  vscode.postMessage({ type: 'submit', mode: 'delete', value: { name: $('mode').value } });
 });
 vscode.postMessage({ type: 'ready' });
 `
@@ -158,23 +186,44 @@ export function openCategoryForm(): void {
     { enableScripts: true, retainContextWhenHidden: true },
   );
   panel.webview.html = pageShell('管理分类', body(), script(), panel.webview.cspSource);
-  const sendInit = () =>
-    panel.webview.postMessage({
+  const sendInit = () => {
+    const refCounts: Record<string, number> = {};
+    for (const p of listPosts(profile.postsDir)) {
+      if (p.category) refCounts[p.category] = (refCounts[p.category] ?? 0) + 1;
+    }
+    return panel.webview.postMessage({
       type: 'init',
       icons: readIcons(profile.iconFile),
       categories: readCategories(profile.siteFile),
+      refCounts,
     });
+  };
   panel.webview.onDidReceiveMessage((msg) => {
     try {
       if (msg.type === 'ready') {
         void sendInit();
       } else if (msg.type === 'submit') {
         const v = msg.value;
+        const countRefs = (name: string) =>
+          listPosts(profile.postsDir).filter((p) => p.category === name).length;
+        if (msg.mode === 'delete') {
+          const refs = countRefs(v.name);
+          if (refs > 0) throw new Error(`「${v.name}」还有 ${refs} 篇文章引用,不能删除`);
+          deleteCategory(profile.siteFile, v.name);
+          void sendInit();
+          panel.webview.postMessage({ type: 'saved', mode: 'delete' });
+          return;
+        }
         if (!v.name) throw new Error('分类名不能为空');
         if (!v.icon) throw new Error('请选一个图标');
         if (!v.description) throw new Error('描述不能为空');
         if (msg.mode === 'edit') {
-          updateCategory(profile.siteFile, v.name, {
+          if (v.renameTo && v.renameTo !== v.name) {
+            const refs = countRefs(v.name);
+            if (refs > 0) throw new Error(`「${v.name}」还有 ${refs} 篇文章引用,不能改名`);
+            renameCategory(profile.siteFile, v.name, v.renameTo);
+          }
+          updateCategory(profile.siteFile, v.renameTo || v.name, {
             icon: v.icon,
             tone: v.tone,
             description: v.description,
