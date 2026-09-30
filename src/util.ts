@@ -1,0 +1,38 @@
+import * as vscode from 'vscode';
+import { ProfileInfo, resolveProfile } from './core/profile';
+
+export function workspaceRoot(): string {
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  if (!folder) throw new Error('请先打开博客项目文件夹');
+  return folder.uri.fsPath;
+}
+
+/** 解析当前档案;失败时弹出错误并继续抛出,由调用方决定要不要吞掉 */
+export function getProfile(): ProfileInfo {
+  const root = workspaceRoot();
+  try {
+    return resolveProfile(root);
+  } catch (e) {
+    vscode.window.showErrorMessage(`档案解析失败:${(e as Error).message}`);
+    throw e;
+  }
+}
+
+export async function openFile(file: string): Promise<void> {
+  const doc = await vscode.workspace.openTextDocument(file);
+  await vscode.window.showTextDocument(doc);
+}
+
+/** 包装命令执行,把核心层抛出的中文错误弹给用户 */
+export function guard<T extends unknown[]>(fn: (...args: T) => unknown): (...args: T) => void {
+  return (...args) => {
+    try {
+      const r = fn(...args);
+      if (r instanceof Promise) {
+        r.catch((e) => vscode.window.showErrorMessage((e as Error).message));
+      }
+    } catch (e) {
+      vscode.window.showErrorMessage((e as Error).message);
+    }
+  };
+}

@@ -1,0 +1,139 @@
+{
+  "name": "towards-light-editor",
+  "displayName": "TowardsLight 博客工具",
+  "description": "TowardsLight 博客的文章管理、写作预览与站点配置工具(本地扩展)",
+  "version": "0.1.0",
+  "private": true,
+  "publisher": "towardslight",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "test": "node scripts/test-core.mjs",
+    "package": "vsce package --no-dependencies"
+  },
+  "contributes": {
+    "configuration": {
+      "title": "TowardsLight",
+      "properties": {
+        "towardsLight.devPort": {
+          "type": "number",
+          "default": 4321,
+          "description": "Astro dev server 端口(预览用)"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "towardsLight",
+          "title": "博客",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "towardsLight": [
+        {
+          "id": "towardsLightPosts",
+          "name": "文章"
+        },
+        {
+          "id": "towardsLightConfig",
+          "name": "站点配置"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "towardsLightPosts",
+        "contents": "还没有文章。\n[新建文章](command:towardsLight.newPost)"
+      }
+    ],
+    "commands": [
+      {
+        "command": "towardsLight.refreshPosts",
+        "title": "刷新文章列表",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "towardsLight.newPost",
+        "title": "新建文章",
+        "icon": "$(add)"
+      },
+      {
+        "command": "towardsLight.openPostPreview",
+        "title": "预览文章",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "towardsLight.editSiteConfig",
+        "title": "编辑站点信息",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "towardsLight.addCategory",
+        "title": "新增分类",
+        "icon": "$(folder)"
+      },
+      {
+        "command": "towardsLight.addLink",
+        "title": "新增链接",
+        "icon": "$(link)"
+      },
+      {
+        "command": "towardsLight.addIcon",
+        "title": "新增 Lucide 图标",
+        "icon": "$(symbol-misc)"
+      },
+      {
+        "command": "towardsLight.openSiteFile",
+        "title": "打开 site.ts"
+      },
+      {
+        "command": "towardsLight.openLinksFile",
+        "title": "打开 links.ts"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "towardsLight.newPost",
+          "when": "view == towardsLightPosts",
+          "group": "navigation@1"
+        },
+        {
+          "command": "towardsLight.refreshPosts",
+          "when": "view == towardsLightPosts",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "towardsLight.openPostPreview",
+          "when": "view == towardsLightPosts && viewItem == post",
+          "group": "inline"
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3",
+    "lucide-static": "^1.48.0",
+    "ts-morph": "^28.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "@types/vscode": "1.85.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  }
+}

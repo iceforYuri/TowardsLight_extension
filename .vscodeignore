@@ -1,0 +1,9 @@
+src/**
+scripts/**
+.vscode/**
+node_modules/**
+build.mjs
+tsconfig.json
+*.vsix
+# 测试专用产物,不随扩展分发
+dist/core.mjs
