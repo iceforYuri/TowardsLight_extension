@@ -5,8 +5,9 @@ import { addIcon, lucideIconBody } from './core';
 import { articleImageDir, articleImageRef, copyImageIn } from './core/images';
 import { ConfigProvider } from './configView';
 import { PostNode, PostsProvider } from './posts';
-import { disposeServer, openPostPreview } from './preview';
-import { getProfile, guard, openFile, pickImages, workspaceRoot } from './util';
+import { disposeServer, onDidChangeServers, openPostPreview, openSitePreview, startPreview, stopServer } from './preview';
+import { PreviewProvider, ServerNode } from './previewView';
+import { getProfile, getTemplateDir, guard, initUtil, openFile, pickImages, setTemplateDir, workspaceRoot } from './util';
 import { openCategoryForm } from './webviews/category';
 import { openLinkForm } from './webviews/link';
 import { openNewPostForm } from './webviews/newPost';
@@ -103,7 +104,13 @@ async function switchProfileCommand(
   refreshAll: () => void,
 ): Promise<void> {
   const root = workspaceRoot();
-  const showcase = path.join(root, 'src', 'profiles', 'showcase');
+  let templateDir = root;
+  try {
+    templateDir = getTemplateDir();
+  } catch {
+    /* 模板未识别时按工作区根处理 */
+  }
+  const showcase = path.join(templateDir, 'src', 'profiles', 'showcase');
   const envDir = process.env.SITE_PROFILE_DIR;
 
   const items: ProfilePick[] = [];
@@ -123,7 +130,7 @@ async function switchProfileCommand(
   items.push({
     label: '$(package) showcase',
     description: '内置示例档案',
-    detail: path.relative(root, showcase),
+    detail: path.relative(templateDir, showcase),
     dir: showcase,
   });
   items.push({
@@ -159,14 +166,46 @@ async function switchProfileCommand(
   }
   process.env.SITE_PROFILE_DIR = dir;
   await context.workspaceState.update('towardsLight.profileDir', dir);
-  disposeServer();
   refreshAll();
   const profile = getProfile();
   const dirName = profile.dir.split(/[\\/]/).pop();
   vscode.window.showInformationMessage(`已切换到档案「${dirName}」:${profile.dir}`);
 }
 
+/** 手动选择模板目录;校验后持久化 */
+async function selectTemplateDirCommand(refreshAll: () => void): Promise<void> {
+  const res = await vscode.window.showOpenDialog({
+    canSelectFiles: false,
+    canSelectFolders: true,
+    canSelectMany: false,
+    openLabel: '选为模板目录',
+  });
+  if (!res?.length) return;
+  await setTemplateDir(res[0].fsPath);
+  refreshAll();
+  vscode.window.showInformationMessage(`模板目录已设为:${res[0].fsPath}`);
+}
+
+/** 启动预览:拉起(或复用)当前 模板+档案 组合的 dev server,给出地址 */
+async function startPreviewCommand(): Promise<void> {
+  const rec = await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: '正在启动 dev server…' },
+    () => startPreview(),
+  );
+  const url = `http://localhost:${rec.port}/`;
+  const action = await vscode.window.showInformationMessage(
+    `预览已启动:${url}`,
+    '在面板中打开',
+    '在浏览器打开',
+    '复制地址',
+  );
+  if (action === '在面板中打开') await openSitePreview(rec);
+  else if (action === '在浏览器打开') await vscode.env.openExternal(vscode.Uri.parse(url));
+  else if (action === '复制地址') await vscode.env.clipboard.writeText(url);
+}
+
 export function activate(context: vscode.ExtensionContext): void {
+  initUtil(context);
   // 恢复上次选择的档案
   const savedDir = context.workspaceState.get<string>('towardsLight.profileDir');
   if (savedDir && fs.existsSync(path.join(savedDir, 'site.ts'))) {
@@ -175,9 +214,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const postsProvider = new PostsProvider();
   const configProvider = new ConfigProvider();
+  const previewProvider = new PreviewProvider();
   const refreshAll = () => {
     postsProvider.refresh();
     configProvider.refresh();
+    previewProvider.refresh();
     watchPosts();
   };
 
@@ -201,8 +242,15 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('towardsLightPosts', postsProvider),
     vscode.window.registerTreeDataProvider('towardsLightConfig', configProvider),
+    vscode.window.registerTreeDataProvider('towardsLightPreview', previewProvider),
+    onDidChangeServers(() => previewProvider.refresh()),
     vscode.commands.registerCommand('towardsLight.refreshPosts', () => postsProvider.refresh()),
     vscode.commands.registerCommand('towardsLight.switchProfile', guard(() => switchProfileCommand(context, refreshAll))),
+    vscode.commands.registerCommand('towardsLight.selectTemplateDir', guard(() => selectTemplateDirCommand(refreshAll))),
+    vscode.commands.registerCommand('towardsLight.startPreview', guard(() => startPreviewCommand())),
+    vscode.commands.registerCommand('towardsLight.stopServer', guard((node?: ServerNode) => {
+      if (node) stopServer(node.rec);
+    })),
     vscode.commands.registerCommand('towardsLight.newPost', guard(() => openNewPostForm(() => postsProvider.refresh()))),
     vscode.commands.registerCommand(
       'towardsLight.openPostPreview',

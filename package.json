@@ -48,6 +48,10 @@
         {
           "id": "towardsLightConfig",
           "name": "站点配置"
+        },
+        {
+          "id": "towardsLightPreview",
+          "name": "预览"
         }
       ]
     },
@@ -110,6 +114,21 @@
       {
         "command": "towardsLight.openLinksFile",
         "title": "打开 links.ts"
+      },
+      {
+        "command": "towardsLight.selectTemplateDir",
+        "title": "选择模板目录",
+        "icon": "$(repo)"
+      },
+      {
+        "command": "towardsLight.startPreview",
+        "title": "启动预览",
+        "icon": "$(play)"
+      },
+      {
+        "command": "towardsLight.stopServer",
+        "title": "停止预览",
+        "icon": "$(debug-stop)"
       }
     ],
     "menus": {
@@ -129,6 +148,11 @@
         {
           "command": "towardsLight.openPostPreview",
           "when": "view == towardsLightPosts && viewItem == post",
+          "group": "inline"
+        },
+        {
+          "command": "towardsLight.stopServer",
+          "when": "view == towardsLightPreview && viewItem == server",
           "group": "inline"
         }
       ],

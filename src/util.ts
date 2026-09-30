@@ -9,11 +9,56 @@ export function workspaceRoot(): string {
   return folder.uri.fsPath;
 }
 
+let extContext: vscode.ExtensionContext | undefined;
+
+/** activate 时调用一次,让工具层能读写 workspaceState */
+export function initUtil(context: vscode.ExtensionContext): void {
+  extContext = context;
+}
+
+/** 一个目录是不是 TowardsLight 模板:有 package.json 和档案切换钩子 */
+export function isTemplateDir(dir: string): boolean {
+  return (
+    fs.existsSync(path.join(dir, 'package.json')) &&
+    fs.existsSync(path.join(dir, 'scripts', 'use-profile.mjs'))
+  );
+}
+
+/**
+ * 当前模板目录:用户选择(workspaceState)> 工作区根自动识别。
+ * 都认不出来时抛错,由预览区引导用户手动选择。
+ */
+export function getTemplateDir(): string {
+  const saved = extContext?.workspaceState.get<string>('towardsLight.templateDir');
+  if (saved && isTemplateDir(saved)) return saved;
+  const root = workspaceRoot();
+  if (isTemplateDir(root)) return root;
+  throw new Error('没认出来模板目录(需要包含 package.json 和 scripts/use-profile.mjs),请在预览区手动选择');
+}
+
+export async function setTemplateDir(dir: string): Promise<void> {
+  if (!extContext) throw new Error('扩展尚未激活');
+  if (!isTemplateDir(dir)) {
+    throw new Error(`「${dir}」不是 TowardsLight 模板:缺少 package.json 或 scripts/use-profile.mjs`);
+  }
+  await extContext.workspaceState.update('towardsLight.templateDir', dir);
+}
+
 /** 解析当前档案;失败时弹出错误并继续抛出,由调用方决定要不要吞掉 */
 export function getProfile(): ProfileInfo {
   const root = workspaceRoot();
   try {
-    return resolveProfile(root);
+    const profile = resolveProfile(root);
+    // 图标表在模板侧;模板目录被改到别处时跟随
+    try {
+      const template = getTemplateDir();
+      if (template !== root) {
+        profile.iconFile = path.join(template, 'src', 'components', 'Icon.astro');
+      }
+    } catch {
+      /* 模板未识别时沿用工作区根的默认路径 */
+    }
+    return profile;
   } catch (e) {
     vscode.window.showErrorMessage(`档案解析失败:${(e as Error).message}`);
     throw e;
