@@ -546,6 +546,24 @@ export function deleteGroup(linksFile: string, id: string): void {
   sf.saveSync();
 }
 
+/** 整组重排:ids 给定的顺序即文件顺序(也是页面展示顺序);元素文本原样搬运,只换顺序 */
+export function reorderGroups(linksFile: string, ids: string[]): void {
+  const project = newProject();
+  const sf = project.addSourceFileAtPath(linksFile);
+  const arr = linkGroupsArray(sf);
+  const items = new Map<string, string>();
+  for (const el of arr.getElements()) {
+    if (!Node.isObjectLiteralExpression(el)) continue;
+    const id = readStringProp(el, 'id');
+    if (id) items.set(id, el.getText());
+  }
+  const same = ids.length === items.size && ids.every((id) => items.has(id));
+  if (!same) throw new Error('重排请求的 id 集合与文件不一致,可能已被手动改过');
+  const inner = '\n' + ids.map((id) => `  ${items.get(id)},`).join('\n') + '\n';
+  const text = sf.getFullText();
+  fs.writeFileSync(linksFile, text.slice(0, arr.getStart() + 1) + inner + text.slice(arr.getEnd() - 1), 'utf8');
+}
+
 /** 追加一条链接;分组 id 是新的时,一并补进 linkGroups(对象形式) */
 export function addLink(linksFile: string, link: NewLink): void {
   const project = newProject();

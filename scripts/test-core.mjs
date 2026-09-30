@@ -192,6 +192,14 @@ core.deleteGroup(linksFile, 'podcast');
 assert.ok(!core.readLinkGroups(linksFile).some((g) => g.id === 'podcast'));
 ok('分组 addGroup / updateGroup / deleteGroup');
 
+const gids = core.readLinkGroups(linksFile).map((g) => g.id);
+const reordered = [gids.at(-1), ...gids.slice(0, -1)];
+core.reorderGroups(linksFile, reordered);
+assert.deepEqual(core.readLinkGroups(linksFile).map((g) => g.id), reordered);
+assert.throws(() => core.reorderGroups(linksFile, [...reordered, 'ghost']), /不一致/);
+core.reorderGroups(linksFile, gids); // 还原
+ok('reorderGroups 整组重排 + 集合校验');
+
 // ── Icon.astro ──
 const icons = core.readIcons(iconFile);
 assert.ok(icons.length > 30);

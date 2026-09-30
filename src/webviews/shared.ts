@@ -278,6 +278,14 @@ button.small:disabled { opacity: 0.45; cursor: default; transform: none; }
 .lm-add:hover { color: var(--accent); border-color: var(--accent); }
 .lm-editor { border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); border-radius: 12px; padding: 16px 18px; margin: 10px 0; background: var(--raise); animation: rise 0.3s var(--ease); }
 .lm-editor .icon-grid { max-height: 150px; }
+.lm-ghead { cursor: grab; border-radius: 8px; padding: 2px 6px; margin-left: -6px; transition: background 0.15s var(--ease); }
+.lm-ghead:active { cursor: grabbing; }
+.lm-ghead:hover { background: var(--raise); }
+.lm-ghead .drag-hint { opacity: 0; color: var(--faint); font-size: 11px; transition: opacity 0.15s; align-self: center; }
+.lm-ghead:hover .drag-hint { opacity: 1; }
+.lm-section.dragging { opacity: 0.35; }
+.lm-section.drop-before { box-shadow: 0 -2px 0 0 var(--accent); }
+.lm-section.drop-after { box-shadow: 0 2px 0 0 var(--accent); }
 .toc .cnt { margin-left: auto; font-family: var(--mono); font-size: 10px; opacity: 0.6; }
 .toc .toc-new { color: var(--faint); border: 0; background: none; font: inherit; font-size: 12px; cursor: pointer; text-align: left; display: flex; padding: 6px 11px; border-radius: 7px; width: 100%; }
 .toc .toc-new:hover { color: var(--accent); background: var(--raise-2); }

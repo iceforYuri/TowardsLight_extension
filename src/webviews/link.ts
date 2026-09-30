@@ -8,6 +8,7 @@ import {
   readIcons,
   readLinkGroups,
   readLinks,
+  reorderGroups,
   updateGroup,
   updateLink,
 } from '../core';
@@ -65,8 +66,9 @@ function render() {
       ? rows.map((l, i) => rowHtml(l, i, rows.length)).join('')
       : '<div class="lm-empty">还没有链接</div>';
     const gLocked = rows.length > 0;
-    return '<section id="g_' + esc(g.id) + '">'
-      + '<div class="lm-ghead"><h2>' + esc(g.label) + '</h2><span class="lm-gid">' + esc(g.id) + '</span>'
+    return '<section class="lm-section" id="g_' + esc(g.id) + '" data-gid="' + esc(g.id) + '">'
+      + '<div class="lm-ghead" draggable="true" title="拖动调整分组顺序"><h2>' + esc(g.label) + '</h2><span class="lm-gid">' + esc(g.id) + '</span>'
+      + '<span class="drag-hint">⠿ 拖动排序</span>'
       + '<span class="lm-gops">'
       + '<button class="small" data-act="group-edit" data-id="' + esc(g.id) + '">编辑分组</button>'
       + '<button class="small danger" data-act="group-del" data-id="' + esc(g.id) + '"' + (gLocked ? ' disabled title="组内还有链接,不能删除"' : '') + '>删除</button>'
@@ -80,6 +82,7 @@ function render() {
   }).join('') + (editing?.kind === 'group-new' ? groupEditorHtml(null) : '');
 
   bindOps();
+  bindDrag();
   bindSpy();
 }
 
@@ -259,6 +262,46 @@ function doSaveGroup() {
   render();
 }
 
+// ── 分组拖拽排序 ──
+let dragId = null;
+function bindDrag() {
+  document.querySelectorAll('.lm-ghead').forEach((h) => {
+    h.addEventListener('dragstart', (e) => {
+      dragId = h.closest('.lm-section').dataset.gid;
+      e.dataTransfer.effectAllowed = 'move';
+      h.closest('.lm-section').classList.add('dragging');
+    });
+    h.addEventListener('dragend', () => {
+      dragId = null;
+      document.querySelectorAll('.lm-section').forEach((s) => s.classList.remove('dragging', 'drop-before', 'drop-after'));
+    });
+  });
+  document.querySelectorAll('.lm-section').forEach((sec) => {
+    sec.addEventListener('dragover', (e) => {
+      if (!dragId || sec.dataset.gid === dragId) return;
+      e.preventDefault();
+      const rect = sec.getBoundingClientRect();
+      const after = e.clientY > rect.top + rect.height / 2;
+      document.querySelectorAll('.lm-section').forEach((s) => s.classList.remove('drop-before', 'drop-after'));
+      sec.classList.add(after ? 'drop-after' : 'drop-before');
+    });
+    sec.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (!dragId || sec.dataset.gid === dragId) return;
+      const rect = sec.getBoundingClientRect();
+      const after = e.clientY > rect.top + rect.height / 2;
+      const from = groups.findIndex((g) => g.id === dragId);
+      let to = groups.findIndex((g) => g.id === sec.dataset.gid) + (after ? 1 : 0);
+      if (from < 0 || to < 0) return;
+      const [moved] = groups.splice(from, 1);
+      if (from < to) to--;
+      groups.splice(to, 0, moved);
+      vscode.postMessage({ type: 'reorderGroups', ids: groups.map((g) => g.id) });
+      render();
+    });
+  });
+}
+
 // ── scrollspy ──
 let io = null;
 function bindSpy() {
@@ -327,6 +370,9 @@ export function openLinkForm(): void {
       if (msg.type === 'move') {
         for (let s = 0; s < (msg.steps ?? 1); s++) moveLink(profile.linksFile, msg.key, msg.dir);
         panel.webview.postMessage({ type: 'saved', text: '顺序已更新' });
+      } else if (msg.type === 'reorderGroups') {
+        reorderGroups(profile.linksFile, msg.ids);
+        panel.webview.postMessage({ type: 'saved', text: '分组顺序已更新' });
       } else if (msg.type === 'delete') {
         deleteLink(profile.linksFile, msg.key);
         panel.webview.postMessage({ type: 'saved', text: '链接已删除' });
