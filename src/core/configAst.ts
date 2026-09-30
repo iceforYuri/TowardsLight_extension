@@ -72,6 +72,8 @@ export interface SiteConfigValues {
   shortBio: string;
   email: string;
   siteUrl: string;
+  /** 默认主题:system / light / dark */
+  themeDefault: string;
   avatar: string;
   avatarPosition: string;
   statusMode: string;
@@ -93,6 +95,7 @@ const TOP_STRING_FIELDS = [
   'shortBio',
   'email',
   'siteUrl',
+  'themeDefault',
   'avatar',
   'avatarPosition',
 ] as const;

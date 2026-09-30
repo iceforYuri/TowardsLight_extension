@@ -123,6 +123,7 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18), 0 0 0 1px var(--line-strong);
 }
 .seg .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.seg svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 
 /* ---- check-card ---- */
 .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }

@@ -25,6 +25,12 @@ const TEXT_MODES: [string, string][] = [
   ['on-light', '深字'],
 ];
 
+const THEME_MODES: [string, string, string][] = [
+  ['system', '跟随系统', '<svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>'],
+  ['light', '明亮', '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'],
+  ['dark', '深色', '<svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/></svg>'],
+];
+
 function body(): string {
   const basic = `
 <label class="f">站点名称</label><input type="text" id="siteName">
@@ -38,7 +44,13 @@ function body(): string {
 <div class="row">
   <div><label class="f">邮箱</label><input type="text" id="email"></div>
   <div><label class="f">站点 URL</label><input type="text" id="siteUrl"></div>
-</div>`;
+</div>
+<label class="f">默认主题</label>
+<input type="hidden" id="themeDefault">
+<div class="seg" id="themeSeg">
+  ${THEME_MODES.map(([v, label, icon]) => `<button type="button" data-value="${v}">${icon}${label}</button>`).join('')}
+</div>
+<div class="hint">访客的本地选择优先;此处只决定新访客首屏</div>`;
 
   const avatar = `
 <label class="f">头像路径</label>
@@ -108,6 +120,7 @@ function script(): string {
     'shortBio',
     'email',
     'siteUrl',
+    'themeDefault',
     'avatar',
     'avatarPosition',
     'statusMode',
@@ -142,6 +155,7 @@ function segInit(segId, inputId, fallback) {
 }
 segInit('statusSeg', 'statusMode', 'building');
 segInit('heroTextModeSeg', 'heroTextMode', 'auto');
+segInit('themeSeg', 'themeDefault', 'system');
 
 window.addEventListener('message', (e) => {
   const msg = e.data;
@@ -150,6 +164,7 @@ window.addEventListener('message', (e) => {
     for (const f of PLAIN) $(f).value = v[f] ?? '';
     $('statusMode').dispatchEvent(new Event('input', { bubbles: true }));
     $('heroTextMode').dispatchEvent(new Event('input', { bubbles: true }));
+    $('themeDefault').dispatchEvent(new Event('input', { bubbles: true }));
     for (const k of PAGES) {
       if (k !== 'notFound' && $('bd_' + k)) $('bd_' + k).value = (v.backdrops ?? {})[k] ?? '';
       const pg = (v.pages ?? {})[k];

@@ -36,6 +36,7 @@ assert.equal(cfg.heroBackground, '/images/hero-bg.svg');
 assert.equal(cfg.backdrops.archive, '');
 assert.equal(cfg.pages.archive.title, '归档');
 assert.ok(cfg.pages.notFound.description.length > 0);
+assert.equal(cfg.themeDefault, 'system');
 ok('readSiteConfig 读取基本字段与嵌套块(currentStatus/homeHero/pageBackdrops/pages)');
 
 const before = fs.readFileSync(siteFile, 'utf8');
@@ -44,15 +45,17 @@ const changed = core.updateSiteConfig(siteFile, {
   statusMode: 'writing',
   statusText: '正在验证扩展的读写',
   heroBackground: '/images/new-hero.jpg',
+  themeDefault: 'dark',
   backdrops: { archive: '/images/archive-bg.jpg', tags: '' },
   pages: { links: { title: '宝藏链接', description: '改写后的链接页描述' } },
 });
-assert.equal(changed, 7);
+assert.equal(changed, 8);
 const cfg2 = core.readSiteConfig(siteFile);
 assert.equal(cfg2.siteName, '测试站');
 assert.equal(cfg2.statusMode, 'writing');
 assert.equal(cfg2.statusText, '正在验证扩展的读写');
 assert.equal(cfg2.heroBackground, '/images/new-hero.jpg');
+assert.equal(cfg2.themeDefault, 'dark');
 assert.equal(cfg2.backdrops.archive, '/images/archive-bg.jpg');
 assert.equal(cfg2.backdrops.tags, '');
 assert.equal(cfg2.pages.links.title, '宝藏链接');
@@ -64,6 +67,7 @@ const after = fs.readFileSync(siteFile, 'utf8');
 assert.ok(after.includes('/** 头像裁切焦点'), '注释应保留');
 assert.ok(after.includes('} as const'), 'as const 应保留');
 assert.ok(after.includes("'writing' | 'building' | 'available' | 'offline'"), 'mode 的 as 断言应保留');
+assert.ok(after.includes("'system' | 'light' | 'dark'"), 'themeDefault 的 as 断言应保留');
 ok('写回保留注释与 as 断言');
 
 // ── categoryMeta ──
