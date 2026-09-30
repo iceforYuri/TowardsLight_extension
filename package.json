@@ -64,6 +64,11 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "towardsLight.switchProfile",
+        "title": "切换档案",
+        "icon": "$(folder-opened)"
+      },
+      {
         "command": "towardsLight.newPost",
         "title": "新建文章",
         "icon": "$(add)"

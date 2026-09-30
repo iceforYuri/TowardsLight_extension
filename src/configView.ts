@@ -8,8 +8,15 @@ interface Entry {
   command?: string;
 }
 
-/** 「站点配置」视图:当前档案提示 + 配置命令的静态入口 */
+/** 「站点配置」视图:当前档案(可点击切换) + 配置命令的静态入口 */
 export class ConfigProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
+  private readonly emitter = new vscode.EventEmitter<void>();
+  readonly onDidChangeTreeData = this.emitter.event;
+
+  refresh(): void {
+    this.emitter.fire();
+  }
+
   getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
     return element;
   }
@@ -19,9 +26,10 @@ export class ConfigProvider implements vscode.TreeDataProvider<vscode.TreeItem> 
     try {
       const profile = getProfile();
       const head = new vscode.TreeItem(`档案:${profile.kind}`, vscode.TreeItemCollapsibleState.None);
-      head.tooltip = profile.dir;
+      head.tooltip = new vscode.MarkdownString(`\`${profile.dir}\`\n\n点击切换档案`);
       head.description = profile.dir.split(/[\\/]/).pop();
       head.iconPath = new vscode.ThemeIcon('folder-opened');
+      head.command = { command: 'towardsLight.switchProfile', title: '切换档案' };
       items.push(head);
     } catch {
       /* 工作区未打开时只显示命令入口 */
