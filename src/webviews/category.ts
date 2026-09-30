@@ -45,6 +45,7 @@ window.addEventListener('message', (e) => {
   if (msg.type === 'init') {
     icons = msg.icons;
     renderIcons();
+    restoreState();
   } else if (msg.type === 'error') {
     showError(msg.message);
   }
@@ -72,7 +73,7 @@ export function openCategoryForm(): void {
     'towardsLightCategory',
     '新增分类',
     vscode.ViewColumn.One,
-    { enableScripts: true },
+    { enableScripts: true, retainContextWhenHidden: true },
   );
   panel.webview.html = pageShell('新增分类', body(), script());
   panel.webview.onDidReceiveMessage((msg) => {

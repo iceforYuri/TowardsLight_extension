@@ -125,6 +125,7 @@ window.addEventListener('message', (e) => {
         $('pg_' + k + '_description').value = pg.description ?? '';
       }
     }
+    restoreState();
   } else if (msg.type === 'imagePicked') {
     $(msg.field).value = msg.ref;
   } else if (msg.type === 'saved') {
@@ -163,7 +164,7 @@ export function openSiteConfigForm(): void {
     'towardsLightSiteConfig',
     '站点信息',
     vscode.ViewColumn.One,
-    { enableScripts: true },
+    { enableScripts: true, retainContextWhenHidden: true },
   );
   panel.webview.html = pageShell('站点信息', body(), script());
   panel.webview.onDidReceiveMessage(async (msg) => {

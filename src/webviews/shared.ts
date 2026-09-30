@@ -74,7 +74,7 @@ ${script}
 </html>`;
 }
 
-/** webview 通用脚本头:acquireVsCodeApi + 收发辅助 */
+/** webview 通用脚本头:acquireVsCodeApi + 收发辅助 + 表单状态持久化 */
 export const SCRIPT_PREAMBLE = `
 const vscode = acquireVsCodeApi();
 const $ = (id) => document.getElementById(id);
@@ -83,6 +83,25 @@ function showError(text) {
   el.textContent = text;
   el.style.display = text ? 'block' : 'none';
 }
+// 表单状态持久化:输入即存,面板被重建(Reload Window 等)后恢复
+function collectState() {
+  const state = {};
+  document.querySelectorAll('input[id], textarea[id], select[id]').forEach((el) => {
+    state[el.id] = el.type === 'checkbox' ? el.checked : el.value;
+  });
+  return state;
+}
+function restoreState() {
+  const state = vscode.getState();
+  if (!state) return;
+  for (const [id, val] of Object.entries(state)) {
+    const el = $(id);
+    if (el) el[el.type === 'checkbox' ? 'checked' : 'value'] = val;
+  }
+}
+document.addEventListener('input', () => vscode.setState(collectState()));
+document.addEventListener('change', () => vscode.setState(collectState()));
+restoreState();
 `;
 
 /**

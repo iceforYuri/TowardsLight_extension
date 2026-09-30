@@ -63,6 +63,7 @@ window.addEventListener('message', (e) => {
     create.value = '__new__';
     create.textContent = '＋ 新建分组…';
     sel.appendChild(create);
+    restoreState();
   } else if (msg.type === 'error') {
     showError(msg.message);
   }
@@ -98,7 +99,7 @@ export function openLinkForm(): void {
     'towardsLightLink',
     '新增链接',
     vscode.ViewColumn.One,
-    { enableScripts: true },
+    { enableScripts: true, retainContextWhenHidden: true },
   );
   panel.webview.html = pageShell('新增链接', body(), script());
   panel.webview.onDidReceiveMessage((msg) => {

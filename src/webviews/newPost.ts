@@ -87,6 +87,7 @@ window.addEventListener('message', (e) => {
       o.textContent = c;
       sel.appendChild(o);
     }
+    restoreState();
   } else if (msg.type === 'coverPicked') {
     const sel = $('cover');
     const o = document.createElement('option');
@@ -132,7 +133,7 @@ export function openNewPostForm(refreshPosts: () => void): void {
     'towardsLightNewPost',
     '新建文章',
     vscode.ViewColumn.One,
-    { enableScripts: true },
+    { enableScripts: true, retainContextWhenHidden: true },
   );
   panel.webview.html = pageShell('新建文章', body(), script());
 
