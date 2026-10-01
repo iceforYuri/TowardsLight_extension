@@ -2,7 +2,7 @@
   "name": "towards-light-editor",
   "displayName": "TowardsLight 博客工具",
   "description": "TowardsLight 博客的文章管理、写作预览与站点配置工具(本地扩展)",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "private": true,
   "publisher": "towardslight",
   "license": "MIT",
@@ -129,6 +129,11 @@
         "command": "towardsLight.stopServer",
         "title": "停止预览",
         "icon": "$(debug-stop)"
+      },
+      {
+        "command": "towardsLight.showServerLog",
+        "title": "查看预览日志",
+        "icon": "$(output)"
       }
     ],
     "menus": {
@@ -142,6 +147,11 @@
           "command": "towardsLight.refreshPosts",
           "when": "view == towardsLightPosts",
           "group": "navigation@2"
+        },
+        {
+          "command": "towardsLight.showServerLog",
+          "when": "view == towardsLightPreview",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [
@@ -152,6 +162,11 @@
         },
         {
           "command": "towardsLight.stopServer",
+          "when": "view == towardsLightPreview && viewItem == server",
+          "group": "inline"
+        },
+        {
+          "command": "towardsLight.showServerLog",
           "when": "view == towardsLightPreview && viewItem == server",
           "group": "inline"
         }

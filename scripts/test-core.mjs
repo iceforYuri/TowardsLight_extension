@@ -222,8 +222,11 @@ assert.ok(iconText.includes('set:html={body}'), 'frontmatter 之外的模板部�
 ok('addIcon 追加进 Icon.astro 且模板部分完好');
 
 // ── frontmatter ──
-const posts = core.listPosts(path.join(SHOWCASE, 'posts'));
-assert.equal(posts.length, 12);
+const postsDir = path.join(SHOWCASE, 'posts');
+const posts = core.listPosts(postsDir);
+// 篇数随 showcase 内容增长,与目录里的 .md 实际数对账,不硬编码
+const mdCount = fs.readdirSync(postsDir).filter((f) => f.endsWith('.md')).length;
+assert.equal(posts.length, mdCount);
 assert.equal(posts[0].pubDate >= posts[1].pubDate, true);
 assert.ok(posts.every((p) => p.valid));
 ok(`listPosts 解析 ${posts.length} 篇文章`);

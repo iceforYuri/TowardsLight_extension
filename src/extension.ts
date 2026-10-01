@@ -5,7 +5,7 @@ import { addIcon, lucideIconBody } from './core';
 import { articleImageDir, articleImageRef, copyImageIn } from './core/images';
 import { ConfigProvider } from './configView';
 import { PostNode, PostsProvider } from './posts';
-import { disposeServer, onDidChangeServers, openPostPreview, openSitePreview, reapOrphanServers, startPreview, stopServer } from './preview';
+import { disposePreviewLog, disposeServer, onDidChangeServers, openPostPreview, openSitePreview, previewLog, reapOrphanServers, startPreview, stopServer } from './preview';
 import { PreviewProvider, ServerNode } from './previewView';
 import { getProfile, getTemplateDir, guard, initUtil, openFile, pickImages, setTemplateDir, workspaceRoot } from './util';
 import { openCategoryForm } from './webviews/category';
@@ -250,6 +250,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('towardsLight.switchProfile', guard(() => switchProfileCommand(context, refreshAll))),
     vscode.commands.registerCommand('towardsLight.selectTemplateDir', guard(() => selectTemplateDirCommand(refreshAll))),
     vscode.commands.registerCommand('towardsLight.startPreview', guard(() => startPreviewCommand())),
+    vscode.commands.registerCommand('towardsLight.showServerLog', () => previewLog().show()),
     vscode.commands.registerCommand('towardsLight.stopServer', guard((node?: ServerNode) => {
       if (node) stopServer(node.rec);
     })),
@@ -279,4 +280,5 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {
   disposeServer();
+  disposePreviewLog();
 }
