@@ -1,4 +1,5 @@
 import { ChildProcess, spawn } from 'node:child_process';
+import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import * as vscode from 'vscode';
@@ -176,6 +177,9 @@ export function stopServer(rec: ServerRec): void {
  * 启动预览:同组合(模板+档案)的 server 还活着就直接复用;
  * 否则从配置端口起向后找空闲端口,在模板目录 spawn npm run dev。
  * 只复用自己记账的 server,不动用户终端里手动起的。
+ *
+ * 单预览纪律:junction(src/profiles/active)全局唯一,同模板的异档案
+ * server 并存必然互相换内容——启动新组合前自动停掉同模板的旧 server。
  */
 export async function startPreview(): Promise<ServerRec> {
   const templateDir = getTemplateDir();
@@ -190,6 +194,13 @@ export async function startPreview(): Promise<ServerRec> {
     return existing;
   }
   if (existing) stopServer(existing);
+
+  for (const stale of servers.filter(
+    (s) => s.templateDir === templateDir && s.profileDir !== profile.dir,
+  )) {
+    log.appendLine(`[${stale.port}] 档案已切换,停止旧 server(${stale.profileDir})`);
+    stopServer(stale);
+  }
 
   const preferred = vscode.workspace
     .getConfiguration('towardsLight')
@@ -308,4 +319,66 @@ export function disposeServer(): void {
   servers.length = 0;
   persistServers();
   emitter.fire();
+}
+
+// ── junction 变更感知:外部进程(终端 dev/build)重指向时可见 ──
+let watchTimer: ReturnType<typeof setInterval> | undefined;
+let lastLinkTarget: string | null = null;
+
+/** 读 active junction 的实际指向;切换的 unlink/symlink 窗口期返回 null(下一拍再看) */
+function currentJunctionTarget(): string | null {
+  const link = path.join(getTemplateDir(), 'src', 'profiles', 'active');
+  try {
+    return path.resolve(path.dirname(link), fs.readlinkSync(link));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 每 2s 读一次 junction 指向。指向变化:始终记输出面板;
+ * 与扩展当前绑定不一致(终端起了别的档案、手动跑了 use-profile)再轻提醒。
+ * 扩展自己起的 server 换档前会先同步绑定,所以变化与绑定一致时静默。
+ */
+export function startJunctionWatch(): void {
+  stopJunctionWatch();
+  try {
+    lastLinkTarget = currentJunctionTarget();
+  } catch {
+    return; // 模板未识别,预览区会引导
+  }
+  watchTimer = setInterval(() => {
+    let target: string | null;
+    try {
+      target = currentJunctionTarget();
+    } catch {
+      return; // 模板突然不可用,跳过本拍
+    }
+    if (target === lastLinkTarget) return;
+    lastLinkTarget = target;
+    const log = previewLog();
+    log.appendLine(`[watch] 档案指向变为 ${target ?? '(缺失)'}`);
+    if (!target) return;
+    let bound: string;
+    try {
+      bound = path.resolve(getProfile().dir);
+    } catch {
+      return;
+    }
+    if (path.resolve(target) === bound) return; // 与绑定一致,自己人换的
+    void vscode.window
+      .showWarningMessage(
+        `档案指向被外部改为「${path.basename(target)}」,与当前扩展绑定不一致,预览内容可能已变化`,
+        '查看日志',
+      )
+      .then((a) => {
+        if (a) log.show(true);
+      });
+  }, 2000);
+  watchTimer.unref?.();
+}
+
+export function stopJunctionWatch(): void {
+  if (watchTimer) clearInterval(watchTimer);
+  watchTimer = undefined;
 }

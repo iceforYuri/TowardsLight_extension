@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { readSiteConfig, updateSiteConfig } from '../core';
 import { copyImageIn, siteImageRef } from '../core/images';
-import { getProfile, pickImages, resolveImageUri } from '../util';
+import { getProfile, assertProfileUnchanged, pickImages, resolveImageUri } from '../util';
 import { cardHtml, imageRowHtml, pageShell, SCRIPT_PREAMBLE } from './shared';
 
 const PAGE_LABELS: [string, string][] = [
@@ -253,7 +253,8 @@ export function openSiteConfigForm(): void {
     vscode.ViewColumn.One,
     { enableScripts: true, retainContextWhenHidden: true },
   );
-  panel.webview.html = pageShell('站点信息', body(), script(), panel.webview.cspSource);
+  const badge = profile.dir.split(/[\\/]/).pop() ?? '';
+  panel.webview.html = pageShell('站点信息', body(), script(), panel.webview.cspSource, badge);
   panel.webview.onDidReceiveMessage(async (msg) => {
     try {
       if (msg.type === 'ready') {
@@ -277,6 +278,7 @@ export function openSiteConfigForm(): void {
           uri: resolveImageUri(panel.webview, profile, ref),
         });
       } else if (msg.type === 'submit') {
+        assertProfileUnchanged(profile);
         const changed = updateSiteConfig(profile.siteFile, msg.values);
         panel.webview.postMessage({ type: 'saved', changed });
       }

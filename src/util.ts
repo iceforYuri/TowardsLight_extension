@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import * as vscode from 'vscode';
 import { ProfileInfo, resolveProfile } from './core/profile';
 
@@ -50,6 +51,34 @@ export async function setTemplateDir(dir: string): Promise<void> {
   await extContext.workspaceState.update('towardsLight.templateDir', dir);
 }
 
+/**
+ * 激活自检:模板的 src/profiles/active 与 public/images 两个 junction 必须完好,
+ * 缺失(并发切换被打断、外部清理等)时跑一遍 use-profile 补齐。
+ * 返回修复说明;无需修复返回 null;修不好抛错。
+ */
+export function ensureJunctions(): string | null {
+  const template = getTemplateDir(); // 未识别时抛错,由调用方决定吞掉
+  const active = path.join(template, 'src', 'profiles', 'active');
+  const images = path.join(template, 'public', 'images');
+  // existsSync 会穿透 junction 检查目标,目标丢了也算缺失
+  const missing = [active, images].filter((p) => !fs.existsSync(p));
+  if (!missing.length) return null;
+  const names = missing.map((p) => path.relative(template, p)).join('、');
+  const profile = getProfile();
+  const res = spawnSync(
+    process.execPath,
+    [path.join(template, 'scripts', 'use-profile.mjs')],
+    { cwd: template, env: { ...process.env, SITE_PROFILE_DIR: profile.dir } },
+  );
+  const still = [active, images].filter((p) => !fs.existsSync(p));
+  if (res.status !== 0 || still.length) {
+    throw new Error(
+      `指向缺失(${names}),自动修复失败:${res.stderr?.toString().trim() || res.stdout?.toString().trim() || '未知原因'}`,
+    );
+  }
+  return `指向缺失(${names}),已按当前档案自动补齐`;
+}
+
 /** 解析当前档案;失败时弹出错误并继续抛出,由调用方决定要不要吞掉 */
 export function getProfile(): ProfileInfo {
   const root = workspaceRoot();
@@ -69,6 +98,19 @@ export function getProfile(): ProfileInfo {
     vscode.window.showErrorMessage(`档案解析失败:${(e as Error).message}`);
     throw e;
   }
+}
+
+/**
+ * 表单提交前的档案守卫:表单在打开那一刻锁定档案,
+ * 若侧边栏绑定后来被切换,拒绝写入——宁可重开表单,不写错档案。
+ */
+export function assertProfileUnchanged(opened: ProfileInfo): void {
+  const now = getProfile();
+  if (now.dir === opened.dir) return;
+  const base = (p: string) => p.split(/[\\/]/).pop();
+  throw new Error(
+    `档案绑定已切换:本表单打开时是「${base(opened.dir)}」,现在是「${base(now.dir)}」。为避免写错档案,请关闭本表单后重新打开`,
+  );
 }
 
 export async function openFile(file: string): Promise<void> {

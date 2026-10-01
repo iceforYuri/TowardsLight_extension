@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { buildPostContent, listPosts, readCategories, SLUG_PATTERN } from '../core';
 import { articleImageDir, articleImageRef, copyImageIn } from '../core/images';
 import { listImages, ProfileInfo } from '../core/profile';
-import { getProfile, pickImages, resolveImageUri } from '../util';
+import { assertProfileUnchanged, getProfile, pickImages, resolveImageUri } from '../util';
 import { cardHtml, pageShell, SCRIPT_PREAMBLE } from './shared';
 
 const CHECK_SVG = '<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>';
@@ -148,7 +148,7 @@ export function openNewPostForm(refreshPosts: () => void): void {
     vscode.ViewColumn.One,
     { enableScripts: true, retainContextWhenHidden: true },
   );
-  panel.webview.html = pageShell('新建文章', body(), script(), panel.webview.cspSource);
+  panel.webview.html = pageShell('新建文章', body(), script(), panel.webview.cspSource, profile.dir.split(/[\\/]/).pop() ?? '');
 
   panel.webview.onDidReceiveMessage(async (msg) => {
     if (msg.type === 'ready') {
@@ -169,6 +169,7 @@ export function openNewPostForm(refreshPosts: () => void): void {
     if (msg.type !== 'submit') {
       if (msg.type === 'pickCover') {
         try {
+          assertProfileUnchanged(profile);
           if (!SLUG_PATTERN.test(msg.slug ?? '')) {
             throw new Error('先填好 slug(小写字母/数字/连字符),封面要按它归档');
           }
@@ -192,6 +193,7 @@ export function openNewPostForm(refreshPosts: () => void): void {
     }
     const v = msg.value;
     try {
+      assertProfileUnchanged(profile);
       if (!v.title) throw new Error('标题不能为空');
       if (!v.description) throw new Error('描述不能为空');
       if (!v.category) throw new Error('分类不能为空');

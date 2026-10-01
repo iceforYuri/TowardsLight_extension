@@ -12,7 +12,7 @@ import {
   updateGroup,
   updateLink,
 } from '../core';
-import { getProfile } from '../util';
+import { assertProfileUnchanged, getProfile } from '../util';
 import { pageShell, SCRIPT_PREAMBLE } from './shared';
 
 const CHECK_SVG = '<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>';
@@ -346,7 +346,7 @@ export function openLinkForm(): void {
     vscode.ViewColumn.One,
     { enableScripts: true, retainContextWhenHidden: true },
   );
-  panel.webview.html = pageShell('链接管理', body(), script(), panel.webview.cspSource);
+  panel.webview.html = pageShell('链接管理', body(), script(), panel.webview.cspSource, profile.dir.split(/[\\/]/).pop() ?? '');
 
   const sendInit = () =>
     panel.webview.postMessage({
@@ -367,6 +367,8 @@ export function openLinkForm(): void {
         void sendInit();
         return;
       }
+      // 之后全是写操作:提交前统一校验档案绑定未被切换
+      assertProfileUnchanged(profile);
       if (msg.type === 'move') {
         for (let s = 0; s < (msg.steps ?? 1); s++) moveLink(profile.linksFile, msg.key, msg.dir);
         panel.webview.postMessage({ type: 'saved', text: '顺序已更新' });

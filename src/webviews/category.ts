@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { addCategory, deleteCategory, listPosts, readCategories, readIcons, renameCategory, updateCategory } from '../core';
-import { getProfile } from '../util';
+import { assertProfileUnchanged, getProfile } from '../util';
 import { ICON_PICKER_HTML, ICON_PICKER_SCRIPT, pageShell, SCRIPT_PREAMBLE } from './shared';
 
 function body(): string {
@@ -185,7 +185,7 @@ export function openCategoryForm(): void {
     vscode.ViewColumn.One,
     { enableScripts: true, retainContextWhenHidden: true },
   );
-  panel.webview.html = pageShell('管理分类', body(), script(), panel.webview.cspSource);
+  panel.webview.html = pageShell('管理分类', body(), script(), panel.webview.cspSource, profile.dir.split(/[\\/]/).pop() ?? '');
   const sendInit = () => {
     const refCounts: Record<string, number> = {};
     for (const p of listPosts(profile.postsDir)) {
@@ -203,6 +203,7 @@ export function openCategoryForm(): void {
       if (msg.type === 'ready') {
         void sendInit();
       } else if (msg.type === 'submit') {
+        assertProfileUnchanged(profile);
         const v = msg.value;
         const countRefs = (name: string) =>
           listPosts(profile.postsDir).filter((p) => p.category === name).length;

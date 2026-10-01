@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
  * 视觉 DNA 与博客一致:衬线展示标题、等宽元信息、柔和卡片、低存在感动效;
  * 颜色全部桥接 VS Code 主题变量,跟随编辑器明暗主题。
  */
-export function pageShell(title: string, body: string, script: string, cspSource = ''): string {
+export function pageShell(title: string, body: string, script: string, cspSource = '', badge = ''): string {
   const nonce = crypto.randomBytes(16).toString('hex');
   const imgSrc = cspSource ? `img-src ${cspSource} data:;` : '';
   return `<!DOCTYPE html>
@@ -57,6 +57,19 @@ h1 {
   line-height: 1.25; letter-spacing: 0.01em; margin: 0 0 8px;
 }
 .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 30px; }
+
+/* 档案徽章:右上角标明本表单读写哪个档案(打开时锁定,切换绑定后提交会被拒) */
+.profile-badge {
+  position: fixed; top: 14px; right: 16px; z-index: 50;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em;
+  color: var(--muted); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px;
+  display: flex; align-items: center; gap: 6px; opacity: 0.9;
+}
+.profile-badge::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); flex: none;
+}
 
 /* ---- 卡片分区 ---- */
 .card {
@@ -313,6 +326,7 @@ html { scroll-behavior: smooth; }
 </style>
 </head>
 <body>
+${badge ? `<div class="profile-badge" title="本表单的读取与保存都作用于该档案(打开时锁定);在侧边栏「档案」行切换绑定">档案:${badge}</div>` : ''}
 <div class="wrap">
 ${body}
 </div>

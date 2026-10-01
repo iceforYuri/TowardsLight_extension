@@ -5,9 +5,9 @@ import { addIcon, lucideIconBody } from './core';
 import { articleImageDir, articleImageRef, copyImageIn } from './core/images';
 import { ConfigProvider } from './configView';
 import { PostNode, PostsProvider } from './posts';
-import { disposePreviewLog, disposeServer, onDidChangeServers, openPostPreview, openSitePreview, previewLog, reapOrphanServers, startPreview, stopServer } from './preview';
+import { disposePreviewLog, disposeServer, onDidChangeServers, openPostPreview, openSitePreview, previewLog, reapOrphanServers, startJunctionWatch, startPreview, stopJunctionWatch, stopServer } from './preview';
 import { PreviewProvider, ServerNode } from './previewView';
-import { getProfile, getTemplateDir, guard, initUtil, openFile, pickImages, setTemplateDir, workspaceRoot } from './util';
+import { ensureJunctions, getProfile, getTemplateDir, guard, initUtil, openFile, pickImages, setTemplateDir, workspaceRoot } from './util';
 import { openCategoryForm } from './webviews/category';
 import { openLinkForm } from './webviews/link';
 import { openNewPostForm } from './webviews/newPost';
@@ -183,6 +183,7 @@ async function selectTemplateDirCommand(refreshAll: () => void): Promise<void> {
   if (!res?.length) return;
   await setTemplateDir(res[0].fsPath);
   refreshAll();
+  startJunctionWatch(); // 感知轮询重新锚定到新模板
   vscode.window.showInformationMessage(`模板目录已设为:${res[0].fsPath}`);
 }
 
@@ -213,6 +214,14 @@ export function activate(context: vscode.ExtensionContext): void {
   if (savedDir && fs.existsSync(path.join(savedDir, 'site.ts'))) {
     process.env.SITE_PROFILE_DIR = savedDir;
   }
+  // 指向自检:junction 缺失(并发切换残骸、外部清理)就地补齐;然后挂变更感知
+  try {
+    const fixed = ensureJunctions();
+    if (fixed) previewLog().appendLine(`[self-check] ${fixed}`);
+  } catch (e) {
+    vscode.window.showWarningMessage(`${(e as Error).message}(可在模板目录手动运行 node scripts/use-profile.mjs)`);
+  }
+  startJunctionWatch();
 
   const postsProvider = new PostsProvider();
   const configProvider = new ConfigProvider();
@@ -279,6 +288,7 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
+  stopJunctionWatch();
   disposeServer();
   disposePreviewLog();
 }
