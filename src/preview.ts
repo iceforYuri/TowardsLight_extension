@@ -178,8 +178,8 @@ export function stopServer(rec: ServerRec): void {
  * 否则从配置端口起向后找空闲端口,在模板目录 spawn npm run dev。
  * 只复用自己记账的 server,不动用户终端里手动起的。
  *
- * 单预览纪律:junction(src/profiles/active)全局唯一,同模板的异档案
- * server 并存必然互相换内容——启动新组合前自动停掉同模板的旧 server。
+ * 单预览纪律:junction(src/profiles/active)全局唯一,异档案 server 并存必然互踩。
+ * 主防线在「切换档案即停旧 server」(switchProfile);这里的过滤是兜底。
  */
 export async function startPreview(): Promise<ServerRec> {
   const templateDir = getTemplateDir();

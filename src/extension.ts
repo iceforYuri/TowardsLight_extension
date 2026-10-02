@@ -5,7 +5,7 @@ import { addIcon, lucideIconBody } from './core';
 import { articleImageDir, articleImageRef, copyImageIn } from './core/images';
 import { ConfigProvider } from './configView';
 import { PostNode, PostsProvider } from './posts';
-import { disposePreviewLog, disposeServer, onDidChangeServers, openPostPreview, openSitePreview, previewLog, reapOrphanServers, startJunctionWatch, startPreview, stopJunctionWatch, stopServer } from './preview';
+import { disposePreviewLog, disposeServer, listServers, onDidChangeServers, openPostPreview, openSitePreview, previewLog, reapOrphanServers, startJunctionWatch, startPreview, stopJunctionWatch, stopServer } from './preview';
 import { PreviewProvider, ServerNode } from './previewView';
 import { ensureJunctions, getProfile, getTemplateDir, guard, initUtil, openFile, pickImages, setTemplateDir, workspaceRoot } from './util';
 import { openCategoryForm } from './webviews/category';
@@ -166,10 +166,28 @@ async function switchProfileCommand(
   }
   process.env.SITE_PROFILE_DIR = dir;
   await context.workspaceState.update('towardsLight.profileDir', dir);
+  // 切换即停:旧档案的预览 server 继续跑着必然显示错乱内容,主动停掉;
+  // 不自动重启——「起」永远由用户点「启动预览」发起
+  let stopped = 0;
+  let tpl: string | null = null;
+  try {
+    tpl = getTemplateDir();
+  } catch {
+    /* 模板未识别时按全部 server 处理 */
+  }
+  for (const s of [...listServers()]) {
+    if (tpl && s.templateDir !== tpl) continue;
+    if (s.profileDir === dir) continue;
+    previewLog().appendLine(`[${s.port}] 档案已切换,主动停止旧档案的预览 server`);
+    stopServer(s);
+    stopped++;
+  }
   refreshAll();
   const profile = getProfile();
   const dirName = profile.dir.split(/[\\/]/).pop();
-  vscode.window.showInformationMessage(`已切换到档案「${dirName}」:${profile.dir}`);
+  vscode.window.showInformationMessage(
+    `已切换到档案「${dirName}」${stopped ? `,已停止 ${stopped} 个旧档案预览` : ''}。点「启动预览」查看新档案`,
+  );
 }
 
 /** 手动选择模板目录;校验后持久化 */

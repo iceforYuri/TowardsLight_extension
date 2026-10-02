@@ -32,7 +32,7 @@ function ok(name) {
 const cfg = core.readSiteConfig(siteFile);
 assert.equal(cfg.siteName, '拾光集');
 assert.equal(cfg.statusMode, 'building');
-assert.equal(cfg.heroBackground, '/images/hero-bg.svg');
+assert.equal(cfg.heroBackground, '/images/hero-bg-2.svg');
 assert.equal(cfg.backdrops.archive, '');
 assert.equal(cfg.pages.archive.title, '归档');
 assert.ok(cfg.pages.notFound.description.length > 0);
