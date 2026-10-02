@@ -134,17 +134,23 @@ function linkEditorHtml(l, groupId) {
 
 function groupEditorHtml(g) {
   const isNew = !g;
-  const tone = g?.tone ?? '';
-  const toneOpt = (v, label) => '<option value="' + v + '"' + (tone === v ? ' selected' : '') + '>' + label + '</option>';
+  const tone = editing?.tone ?? g?.tone ?? '';
+  const toneCard = (v, name, hint, sw) =>
+    '<div class="tone' + (tone === v ? ' sel' : '') + '" data-act="group-tone" data-tone="' + v + '">'
+    + '<span class="sw" style="' + sw + '"></span>'
+    + '<span><span class="tn">' + name + '</span><span class="th">' + hint + '</span></span></div>';
   return '<div class="lm-editor">'
     + (isNew ? '<div class="row"><div><label class="f">分组 id <span class="req">*</span></label><input type="text" id="eg_id" placeholder="英文小写,如 reading"></div>'
       + '<div><label class="f">显示名 <span class="req">*</span></label><input type="text" id="eg_label"></div></div>'
       : '<label class="f">显示名 <span class="req">*</span></label><input type="text" id="eg_label" value="' + esc(g?.label) + '">')
     + '<label class="f">分组描述</label><input type="text" id="eg_desc" value="' + esc(g?.description) + '">'
-    + '<label class="f">整组色调</label><select id="eg_tone">'
-    + toneOpt('', '中性(不浸染)') + toneOpt('accent', '褐红 accent') + toneOpt('contrast', '青绿 contrast') + toneOpt('steel', '钢蓝 steel')
-    + '</select>'
-    + '<div class="hint">浸染整个栏目;彩色分组建议不超过 3 个</div>'
+    + '<label class="f">整组色调</label><div class="tones">'
+    + toneCard('', 'none', '中性', 'background:transparent;border:1.5px dashed var(--line-strong)')
+    + toneCard('accent', 'accent', '褐红系', 'background:linear-gradient(135deg,#bc6353,#8f4a3e)')
+    + toneCard('contrast', 'contrast', '青绿系', 'background:linear-gradient(135deg,#5d827a,#3f5f58)')
+    + toneCard('steel', 'steel', '钢蓝系', 'background:linear-gradient(135deg,#3472a1,#245380)')
+    + '</div>'
+    + '<div class="hint">浸染组内组件(标题/图标/hover/精选卡),容器保持中性;彩色分组建议不超过 3 个</div>'
     + '<div class="actions"><button class="primary" data-act="save-group">' + (isNew ? '添加分组' : '保存修改') + '</button>'
     + '<button class="small" data-act="cancel">取消</button></div>'
     + '</div>';
@@ -191,8 +197,14 @@ function onAction(e) {
   showError('');
   if (act === 'link-new') editing = { kind: 'link-new', group: el.dataset.group };
   else if (act === 'link-edit') editing = { kind: 'link-edit', key };
-  else if (act === 'group-new') editing = { kind: 'group-new' };
-  else if (act === 'group-edit') editing = { kind: 'group-edit', id: el.dataset.id };
+  else if (act === 'group-new') editing = { kind: 'group-new', tone: '' };
+  else if (act === 'group-edit') editing = { kind: 'group-edit', id: el.dataset.id, tone: groupOf(el.dataset.id)?.tone ?? '' };
+  else if (act === 'group-tone') {
+    // 只原地切换选中态:重渲染会清掉已填的名称/描述
+    if (editing) editing.tone = el.dataset.tone;
+    el.closest('.tones')?.querySelectorAll('.tone').forEach((t) => t.classList.toggle('sel', t.dataset.tone === el.dataset.tone));
+    return;
+  }
   else if (act === 'cancel') editing = null;
   else if (act === 'up' || act === 'down') return doMove(key, act === 'up' ? -1 : 1);
   else if (act === 'del') { armedDel = key; render(); return; }
@@ -258,7 +270,7 @@ function doSaveLink() {
 function doSaveGroup() {
   const label = $('eg_label').value.trim();
   const description = $('eg_desc').value.trim();
-  const tone = $('eg_tone').value;
+  const tone = editing?.tone ?? '';
   if (editing?.kind === 'group-edit') {
     const g = groupOf(editing.id);
     if (g) { g.label = label; g.description = description; g.tone = tone || undefined; }
