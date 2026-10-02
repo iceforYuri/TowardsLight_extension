@@ -67,7 +67,7 @@ function render() {
       ? rows.map((l, i) => rowHtml(l, i, rows.length)).join('')
       : '<div class="lm-empty">还没有链接</div>';
     const gLocked = rows.length > 0;
-    return '<section class="lm-section" id="g_' + esc(g.id) + '" data-gid="' + esc(g.id) + '">'
+    return '<section class="lm-section" id="g_' + esc(g.id) + '" data-gid="' + esc(g.id) + '"' + (g.tone ? ' data-tone="' + esc(g.tone) + '"' : '') + '>'
       + '<div class="lm-ghead" draggable="true" title="拖动调整分组顺序">'
       + (g.tone ? '<span class="lm-tone" style="background:' + (TONE_COLORS[g.tone] || 'var(--line-strong)') + '" title="整组浸染:' + esc(g.tone) + '"></span>' : '')
       + '<h2>' + esc(g.label) + '</h2><span class="lm-gid">' + esc(g.id) + '</span>'

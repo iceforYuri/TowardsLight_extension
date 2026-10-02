@@ -267,6 +267,18 @@ button.small:disabled { opacity: 0.45; cursor: default; transform: none; }
 .lm-ghead h2 { font-family: var(--serif); font-size: 17px; font-weight: 600; margin: 0; }
 .lm-gid { font-family: var(--mono); font-size: 11px; color: var(--faint); }
 .lm-tone { width: 8px; height: 8px; border-radius: 50%; flex: none; align-self: center; }
+
+/* 分组整色(与站点的组件级着色同一套):标题/圆点/图标徽章/行边框归入组色,容器保持中性 */
+.lm-section[data-tone='accent'] { --gt: #bc6353; }
+.lm-section[data-tone='contrast'] { --gt: #5d827a; }
+.lm-section[data-tone='steel'] { --gt: #3472a1; }
+.lm-section[data-tone] .lm-ghead h2 { color: var(--gt); }
+.lm-section[data-tone] .lm-gid { color: color-mix(in srgb, var(--gt) 70%, var(--faint)); }
+.lm-section[data-tone] .lm-rows { border-color: color-mix(in srgb, var(--gt) 32%, var(--line)); }
+.lm-section[data-tone] .lm-row { border-top-color: color-mix(in srgb, var(--gt) 22%, var(--line)); }
+.lm-section[data-tone] .lm-row:hover { background: color-mix(in srgb, var(--gt) 7%, transparent); }
+.lm-section[data-tone] .lm-ico { background: color-mix(in srgb, var(--gt) 13%, transparent); color: var(--gt); }
+.lm-section[data-tone] .lm-add:hover { color: var(--gt); border-color: var(--gt); }
 .lm-gops { margin-left: auto; display: flex; gap: 4px; }
 .lm-gdesc { font-size: 12px; color: var(--muted); margin: 0 0 10px; }
 .lm-rows { border: 1px solid var(--line); border-radius: 12px; background: var(--raise); }
