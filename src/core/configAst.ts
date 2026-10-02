@@ -317,6 +317,16 @@ export interface LinkGroup {
   id: string;
   label: string;
   description: string;
+  /** 整组浸染色调:accent/contrast/steel;缺省=中性 */
+  tone?: string;
+}
+
+const GROUP_TONES = new Set(['accent', 'contrast', 'steel']);
+
+function assertTone(tone: string | undefined): void {
+  if (tone && !GROUP_TONES.has(tone)) {
+    throw new Error(`色调只能是 ${[...GROUP_TONES].join(' / ')}(或留空中性),收到:「${tone}」`);
+  }
 }
 
 export interface LinkItem {
@@ -469,7 +479,7 @@ export function moveLink(linksFile: string, href: string, dir: -1 | 1): void {
   sf.saveSync();
 }
 
-/** 读取链接分组(linkGroups 是对象数组:{id, label, description}) */
+/** 读取链接分组(linkGroups 是对象数组:{id, label, description, tone?}) */
 export function readLinkGroups(linksFile: string): LinkGroup[] {
   const sf = newProject().addSourceFileAtPath(linksFile);
   const decl = sf.getVariableDeclaration('linkGroups');
@@ -483,6 +493,7 @@ export function readLinkGroups(linksFile: string): LinkGroup[] {
       id: readStringProp(el, 'id') ?? '',
       label: readStringProp(el, 'label') ?? '',
       description: readStringProp(el, 'description') ?? '',
+      tone: readStringProp(el, 'tone') || undefined,
     });
   }
   return out.filter((g) => g.id);
@@ -499,6 +510,7 @@ function linkGroupsArray(sf: import('ts-morph').SourceFile): import('ts-morph').
 
 /** 新增分组(对象形式);id 重名报错 */
 export function addGroup(linksFile: string, group: LinkGroup): void {
+  assertTone(group.tone);
   const project = newProject();
   const sf = project.addSourceFileAtPath(linksFile);
   const arr = linkGroupsArray(sf);
@@ -506,20 +518,22 @@ export function addGroup(linksFile: string, group: LinkGroup): void {
     (e) => Node.isObjectLiteralExpression(e) && readStringProp(e, 'id') === group.id,
   );
   if (dup) throw new Error(`分组「${group.id}」已存在`);
+  const tone = group.tone ? `, tone: '${esc(group.tone)}'` : '';
   const text = insertIntoLiteral(
     sf.getFullText(),
     arr,
-    `  { id: '${esc(group.id)}', label: '${esc(group.label)}', description: '${esc(group.description)}' }`,
+    `  { id: '${esc(group.id)}', label: '${esc(group.label)}', description: '${esc(group.description)}'${tone} }`,
   );
   fs.writeFileSync(linksFile, text, 'utf8');
 }
 
-/** 修改分组显示名/描述;id 是引用 key,不可改 */
+/** 修改分组显示名/描述/色调;id 是引用 key,不可改。tone 传 '' 表示清除(回到中性) */
 export function updateGroup(
   linksFile: string,
   id: string,
-  patch: Partial<Pick<LinkGroup, 'label' | 'description'>>,
+  patch: Partial<Pick<LinkGroup, 'label' | 'description' | 'tone'>>,
 ): number {
+  assertTone(patch.tone);
   const project = newProject();
   const sf = project.addSourceFileAtPath(linksFile);
   const el = linkGroupsArray(sf)
@@ -529,6 +543,20 @@ export function updateGroup(
   let changed = 0;
   if (patch.label !== undefined && writeStringProp(el, 'label', patch.label)) changed++;
   if (patch.description !== undefined && writeStringProp(el, 'description', patch.description)) changed++;
+  if (patch.tone !== undefined) {
+    const existing = getProp(el, 'tone');
+    if (patch.tone === '') {
+      if (existing) {
+        existing.remove();
+        changed++;
+      }
+    } else if (existing) {
+      if (writeStringProp(el, 'tone', patch.tone)) changed++;
+    } else {
+      el.addPropertyAssignment({ name: 'tone', initializer: `'${esc(patch.tone)}'` });
+      changed++;
+    }
+  }
   if (changed) sf.saveSync();
   return changed;
 }

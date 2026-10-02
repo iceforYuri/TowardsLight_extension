@@ -112,7 +112,7 @@ ok('renameCategory / deleteCategory 迁移与删除 key');
 // ── links.ts ──
 const groups = core.readLinkGroups(linksFile);
 assert.equal(groups.length, 8);
-assert.deepEqual(groups[0], { id: 'code', label: 'Code', description: '代码托管与开源项目' });
+assert.deepEqual(groups[0], { id: 'code', label: 'Code', description: '代码托管与开源项目', tone: 'steel' });
 ok('readLinkGroups 读出 8 个对象化分组(id/label/description)');
 
 core.addLink(linksFile, {
@@ -191,6 +191,19 @@ assert.equal(pg.label, '播客');
 core.deleteGroup(linksFile, 'podcast');
 assert.ok(!core.readLinkGroups(linksFile).some((g) => g.id === 'podcast'));
 ok('分组 addGroup / updateGroup / deleteGroup');
+
+// 分组 tone:读 showcase 已有示范;新增带 tone;update 设置/修改/清除;非法值报错
+const codeGroup = core.readLinkGroups(linksFile).find((g) => g.id === 'code');
+assert.equal(codeGroup.tone, 'steel', 'showcase code 组应读出演示 tone');
+core.addGroup(linksFile, { id: 'books', label: 'Books', description: '在读的书', tone: 'contrast' });
+assert.equal(core.readLinkGroups(linksFile).find((g) => g.id === 'books').tone, 'contrast');
+core.updateGroup(linksFile, 'books', { tone: 'steel' });
+assert.equal(core.readLinkGroups(linksFile).find((g) => g.id === 'books').tone, 'steel');
+core.updateGroup(linksFile, 'books', { tone: '' });
+assert.equal(core.readLinkGroups(linksFile).find((g) => g.id === 'books').tone, undefined);
+assert.throws(() => core.updateGroup(linksFile, 'books', { tone: 'purple' }), /色调只能是/);
+core.deleteGroup(linksFile, 'books');
+ok('分组 tone 读/写/改/清 + 非法值拦截');
 
 const gids = core.readLinkGroups(linksFile).map((g) => g.id);
 const reordered = [gids.at(-1), ...gids.slice(0, -1)];

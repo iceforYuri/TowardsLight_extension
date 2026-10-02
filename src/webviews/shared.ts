@@ -266,6 +266,7 @@ button.small:disabled { opacity: 0.45; cursor: default; transform: none; }
 .main > .lm-ghead:first-child { margin-top: 0; }
 .lm-ghead h2 { font-family: var(--serif); font-size: 17px; font-weight: 600; margin: 0; }
 .lm-gid { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+.lm-tone { width: 8px; height: 8px; border-radius: 50%; flex: none; align-self: center; }
 .lm-gops { margin-left: auto; display: flex; gap: 4px; }
 .lm-gdesc { font-size: 12px; color: var(--muted); margin: 0 0 10px; }
 .lm-rows { border: 1px solid var(--line); border-radius: 12px; background: var(--raise); }

@@ -30,6 +30,10 @@ function body(): string {
       <span class="sw" style="background:linear-gradient(135deg,#5d827a,#3f5f58)"></span>
       <span><span class="tn">contrast</span><span class="th">青绿系</span></span>
     </div>
+    <div class="tone" data-tone="steel">
+      <span class="sw" style="background:linear-gradient(135deg,#3472a1,#245380)"></span>
+      <span><span class="tn">steel</span><span class="th">钢蓝系</span></span>
+    </div>
   </div>
 
   <label class="f">描述 <span class="req">*</span></label>
@@ -59,7 +63,7 @@ function script(): string {
     SCRIPT_PREAMBLE +
     ICON_PICKER_SCRIPT +
     `
-const TONE_COLOR = { accent: '#bc6353', contrast: '#5d827a' };
+const TONE_COLOR = { accent: '#bc6353', contrast: '#5d827a', steel: '#3472a1' };
 let categories = [];
 let refCounts = {};
 let tone = 'accent';

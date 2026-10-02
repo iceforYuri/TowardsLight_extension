@@ -46,6 +46,7 @@ function svgOf(body) {
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + body + '</svg>';
 }
 const LINK_ICON = '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>';
+const TONE_COLORS = { accent: '#bc6353', contrast: '#5d827a', steel: '#3472a1' };
 function domainOf(href) {
   try { return new URL(href).host; } catch { return href; }
 }
@@ -67,7 +68,9 @@ function render() {
       : '<div class="lm-empty">还没有链接</div>';
     const gLocked = rows.length > 0;
     return '<section class="lm-section" id="g_' + esc(g.id) + '" data-gid="' + esc(g.id) + '">'
-      + '<div class="lm-ghead" draggable="true" title="拖动调整分组顺序"><h2>' + esc(g.label) + '</h2><span class="lm-gid">' + esc(g.id) + '</span>'
+      + '<div class="lm-ghead" draggable="true" title="拖动调整分组顺序">'
+      + (g.tone ? '<span class="lm-tone" style="background:' + (TONE_COLORS[g.tone] || 'var(--line-strong)') + '" title="整组浸染:' + esc(g.tone) + '"></span>' : '')
+      + '<h2>' + esc(g.label) + '</h2><span class="lm-gid">' + esc(g.id) + '</span>'
       + '<span class="drag-hint">⠿ 拖动排序</span>'
       + '<span class="lm-gops">'
       + '<button class="small" data-act="group-edit" data-id="' + esc(g.id) + '">编辑分组</button>'
@@ -131,11 +134,17 @@ function linkEditorHtml(l, groupId) {
 
 function groupEditorHtml(g) {
   const isNew = !g;
+  const tone = g?.tone ?? '';
+  const toneOpt = (v, label) => '<option value="' + v + '"' + (tone === v ? ' selected' : '') + '>' + label + '</option>';
   return '<div class="lm-editor">'
     + (isNew ? '<div class="row"><div><label class="f">分组 id <span class="req">*</span></label><input type="text" id="eg_id" placeholder="英文小写,如 reading"></div>'
       + '<div><label class="f">显示名 <span class="req">*</span></label><input type="text" id="eg_label"></div></div>'
       : '<label class="f">显示名 <span class="req">*</span></label><input type="text" id="eg_label" value="' + esc(g?.label) + '">')
     + '<label class="f">分组描述</label><input type="text" id="eg_desc" value="' + esc(g?.description) + '">'
+    + '<label class="f">整组色调</label><select id="eg_tone">'
+    + toneOpt('', '中性(不浸染)') + toneOpt('accent', '褐红 accent') + toneOpt('contrast', '青绿 contrast') + toneOpt('steel', '钢蓝 steel')
+    + '</select>'
+    + '<div class="hint">浸染整个栏目;彩色分组建议不超过 3 个</div>'
     + '<div class="actions"><button class="primary" data-act="save-group">' + (isNew ? '添加分组' : '保存修改') + '</button>'
     + '<button class="small" data-act="cancel">取消</button></div>'
     + '</div>';
@@ -249,14 +258,15 @@ function doSaveLink() {
 function doSaveGroup() {
   const label = $('eg_label').value.trim();
   const description = $('eg_desc').value.trim();
+  const tone = $('eg_tone').value;
   if (editing?.kind === 'group-edit') {
     const g = groupOf(editing.id);
-    if (g) { g.label = label; g.description = description; }
-    vscode.postMessage({ type: 'updateGroup', id: editing.id, patch: { label, description } });
+    if (g) { g.label = label; g.description = description; g.tone = tone || undefined; }
+    vscode.postMessage({ type: 'updateGroup', id: editing.id, patch: { label, description, tone } });
   } else {
     const id = $('eg_id').value.trim();
-    groups.push({ id, label, description });
-    vscode.postMessage({ type: 'addGroup', value: { id, label, description } });
+    groups.push({ id, label, description, tone: tone || undefined });
+    vscode.postMessage({ type: 'addGroup', value: { id, label, description, tone: tone || undefined } });
   }
   editing = null;
   render();
