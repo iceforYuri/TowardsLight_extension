@@ -289,43 +289,75 @@ function doSaveGroup() {
 
 // ── 分组拖拽排序 ──
 let dragId = null;
+let dragY = 0;
+let scrollRaf = 0;
+
+function sections() { return [...document.querySelectorAll('.lm-section')]; }
+
+/** 最近插入位:指针在第一个「中线之下」的 section 之前;全在上方则插到末尾 */
+function insertIndex(y) {
+  const secs = sections();
+  for (let i = 0; i < secs.length; i++) {
+    const r = secs[i].getBoundingClientRect();
+    if (y < r.top + r.height / 2) return i;
+  }
+  return secs.length;
+}
+
+function markInsert(idx) {
+  const secs = sections();
+  secs.forEach((s) => s.classList.remove('drop-before', 'drop-after'));
+  if (idx < secs.length) secs[idx].classList.add('drop-before');
+  else if (secs.length) secs[secs.length - 1].classList.add('drop-after');
+}
+
+/** 指针贴近视口上/下缘时持续滚动,速度随贴近程度加快 */
+function autoScroll() {
+  if (!dragId) { scrollRaf = 0; return; }
+  const EDGE = 72;
+  let dy = 0;
+  if (dragY < EDGE) dy = -((EDGE - dragY) / EDGE) * 14;
+  else if (dragY > innerHeight - EDGE) dy = ((dragY - innerHeight + EDGE) / EDGE) * 14;
+  if (dy) window.scrollBy(0, dy);
+  scrollRaf = requestAnimationFrame(autoScroll);
+}
+
 function bindDrag() {
   document.querySelectorAll('.lm-ghead').forEach((h) => {
     h.addEventListener('dragstart', (e) => {
       dragId = h.closest('.lm-section').dataset.gid;
       e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', dragId);
       h.closest('.lm-section').classList.add('dragging');
+      dragY = e.clientY;
+      if (!scrollRaf) scrollRaf = requestAnimationFrame(autoScroll);
     });
     h.addEventListener('dragend', () => {
       dragId = null;
-      document.querySelectorAll('.lm-section').forEach((s) => s.classList.remove('dragging', 'drop-before', 'drop-after'));
-    });
-  });
-  document.querySelectorAll('.lm-section').forEach((sec) => {
-    sec.addEventListener('dragover', (e) => {
-      if (!dragId || sec.dataset.gid === dragId) return;
-      e.preventDefault();
-      const rect = sec.getBoundingClientRect();
-      const after = e.clientY > rect.top + rect.height / 2;
-      document.querySelectorAll('.lm-section').forEach((s) => s.classList.remove('drop-before', 'drop-after'));
-      sec.classList.add(after ? 'drop-after' : 'drop-before');
-    });
-    sec.addEventListener('drop', (e) => {
-      e.preventDefault();
-      if (!dragId || sec.dataset.gid === dragId) return;
-      const rect = sec.getBoundingClientRect();
-      const after = e.clientY > rect.top + rect.height / 2;
-      const from = groups.findIndex((g) => g.id === dragId);
-      let to = groups.findIndex((g) => g.id === sec.dataset.gid) + (after ? 1 : 0);
-      if (from < 0 || to < 0) return;
-      const [moved] = groups.splice(from, 1);
-      if (from < to) to--;
-      groups.splice(to, 0, moved);
-      vscode.postMessage({ type: 'reorderGroups', ids: groups.map((g) => g.id) });
-      render();
+      sections().forEach((s) => s.classList.remove('dragging', 'drop-before', 'drop-after'));
     });
   });
 }
+
+// document 级拖放:整页都是有效落点(消灭 section 间隙死区),指示线取最近插入位
+document.addEventListener('dragover', (e) => {
+  if (!dragId) return;
+  e.preventDefault();
+  dragY = e.clientY;
+  markInsert(insertIndex(e.clientY));
+});
+document.addEventListener('drop', (e) => {
+  if (!dragId) return;
+  e.preventDefault();
+  const from = groups.findIndex((g) => g.id === dragId);
+  if (from < 0) return;
+  let to = insertIndex(e.clientY);
+  const [moved] = groups.splice(from, 1);
+  if (from < to) to--;
+  groups.splice(to, 0, moved);
+  vscode.postMessage({ type: 'reorderGroups', ids: groups.map((g) => g.id) });
+  render();
+});
 
 // ── scrollspy ──
 let io = null;

@@ -2,7 +2,7 @@
   "name": "towards-light-editor",
   "displayName": "TowardsLight 博客工具",
   "description": "TowardsLight 博客的文章管理、写作预览与站点配置工具(本地扩展)",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "private": true,
   "publisher": "towardslight",
   "license": "MIT",

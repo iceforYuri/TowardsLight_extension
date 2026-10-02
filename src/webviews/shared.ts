@@ -262,7 +262,8 @@ button.small:disabled { opacity: 0.45; cursor: default; transform: none; }
 .toast svg { width: 15px; height: 15px; stroke: var(--ok); stroke-width: 2.4; fill: none; }
 
 /* ---- 链接管理 ---- */
-.lm-ghead { display: flex; align-items: baseline; gap: 10px; margin: 26px 0 4px; }
+.lm-ghead { display: flex; align-items: baseline; gap: 10px; margin: 26px 0 4px; cursor: grab; }
+.lm-section.dragging .lm-ghead { cursor: grabbing; }
 .main > .lm-ghead:first-child { margin-top: 0; }
 .lm-ghead h2 { font-family: var(--serif); font-size: 17px; font-weight: 600; margin: 0; }
 .lm-gid { font-family: var(--mono); font-size: 11px; color: var(--faint); }
@@ -313,6 +314,7 @@ button.small:disabled { opacity: 0.45; cursor: default; transform: none; }
 .lm-section.dragging { opacity: 0.35; }
 .lm-section.drop-before { box-shadow: 0 -2px 0 0 var(--accent); }
 .lm-section.drop-after { box-shadow: 0 2px 0 0 var(--accent); }
+.lm-section.drop-before, .lm-section.drop-after { background: var(--accent-soft); border-radius: 6px; }
 .toc .cnt { margin-left: auto; font-family: var(--mono); font-size: 10px; opacity: 0.6; }
 .toc .toc-new { color: var(--faint); border: 0; background: none; font: inherit; font-size: 12px; cursor: pointer; text-align: left; display: flex; padding: 6px 11px; border-radius: 7px; width: 100%; }
 .toc .toc-new:hover { color: var(--accent); background: var(--raise-2); }
