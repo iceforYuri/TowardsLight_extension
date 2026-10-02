@@ -22,8 +22,13 @@ function body(): string {
 .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
 .toolbar input[type="search"] { flex: 1; min-width: 160px; background: transparent; border-color: var(--line); }
 .toolbar input[type="search"]:hover { border-color: var(--line-strong); }
-.toolbar select { min-width: 96px; }
+.toolbar select { min-width: 0; width: auto; }
 .toolbar .count { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-left: auto; }
+.chip { padding: 5px 11px; border: 1px solid var(--line); border-radius: 99px; background: transparent;
+  color: var(--muted); font: inherit; font-size: 11.5px; cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease; }
+.chip:hover { border-color: var(--line-strong); color: var(--fg); }
+.chip.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
 .batchbar { display: none; align-items: center; gap: 6px; padding: 8px 12px; margin-bottom: 10px;
   border: 1px solid var(--accent); border-radius: 9px; background: var(--accent-soft); font-size: 12px; }
@@ -83,11 +88,18 @@ function body(): string {
 
 <div class="toolbar">
   <input type="search" id="q" placeholder="搜索标题 / 描述 / 标签 / slug…" aria-label="搜索文章">
+  <select id="fYear" aria-label="按年份筛选"><option value="">全部年份</option></select>
+  <select id="fCat" aria-label="按分类筛选"><option value="">全部分类</option></select>
+  <select id="fTag" aria-label="按标签筛选"><option value="">全部标签</option></select>
   <select id="fStatus" aria-label="按状态筛选">
     <option value="">全部状态</option><option value="pub">已发布</option><option value="draft">草稿</option>
   </select>
-  <select id="fCat" aria-label="按分类筛选"><option value="">全部分类</option></select>
-  <select id="fTag" aria-label="按标签筛选"><option value="">全部标签</option></select>
+  <select id="fSort" aria-label="排序">
+    <option value="pubDate:-1">发布日期 ↓</option><option value="pubDate:1">发布日期 ↑</option>
+    <option value="title:1">标题 A→Z</option><option value="title:-1">标题 Z→A</option>
+  </select>
+  <button class="chip" id="fCover" aria-pressed="false">有封面</button>
+  <button class="chip" id="fFeat" aria-pressed="false">精选</button>
   <span class="count" id="count"></span>
   <button class="primary" id="newPost">新建文章</button>
 </div>
@@ -135,10 +147,16 @@ function filtered() {
   const st = $('fStatus').value;
   const cat = $('fCat').value;
   const tag = $('fTag').value;
+  const year = $('fYear').value;
+  const needCover = $('fCover').classList.contains('on');
+  const needFeat = $('fFeat').classList.contains('on');
   const list = posts.filter((p) => {
     if (st && (st === 'draft') !== p.draft) return false;
     if (cat && p.category !== cat) return false;
     if (tag && !p.tags.includes(tag)) return false;
+    if (year && !(p.pubDate || '').startsWith(year)) return false;
+    if (needCover && !p.cover) return false;
+    if (needFeat && !p.featured) return false;
     if (!q) return true;
     const hay = (p.title + ' ' + p.description + ' ' + p.tags.join(' ') + ' ' + p.slug).toLowerCase();
     return q.split(/\\s+/).every((w) => hay.includes(w));
@@ -194,15 +212,29 @@ function render() {
   $('selAll').checked = visible.length > 0 && visible.every((f) => sel.has(f));
 }
 
-['q', 'fStatus', 'fCat', 'fTag'].forEach((id) => {
+['q', 'fStatus', 'fCat', 'fTag', 'fYear'].forEach((id) => {
   $(id).addEventListener(id === 'q' ? 'input' : 'change', render);
 });
+$('fSort').addEventListener('change', () => {
+  const [k, d] = $('fSort').value.split(':');
+  sort.key = k;
+  sort.dir = Number(d);
+  render();
+});
+['fCover', 'fFeat'].forEach((id) =>
+  $(id).addEventListener('click', () => {
+    $(id).classList.toggle('on');
+    $(id).setAttribute('aria-pressed', $(id).classList.contains('on'));
+    render();
+  }),
+);
 $('newPost').addEventListener('click', () => vscode.postMessage({ type: 'newPost' }));
 
 document.querySelectorAll('th[data-sort]').forEach((th) =>
   th.addEventListener('click', () => {
     if (sort.key === th.dataset.sort) sort.dir = -sort.dir;
     else { sort.key = th.dataset.sort; sort.dir = th.dataset.sort === 'pubDate' ? -1 : 1; }
+    $('fSort').value = sort.key + ':' + sort.dir;
     render();
   }),
 );
@@ -257,6 +289,9 @@ window.addEventListener('message', (e) => {
     const tags = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).map(([t]) => t);
     const curT = $('fTag').value;
     $('fTag').innerHTML = '<option value="">全部标签</option>' + tags.map((t) => '<option' + (t === curT ? ' selected' : '') + '>' + escLocal(t) + '</option>').join('');
+    const years = [...new Set(posts.map((p) => (p.pubDate || '').slice(0, 4)).filter(Boolean))].sort().reverse();
+    const curY = $('fYear').value;
+    $('fYear').innerHTML = '<option value="">全部年份</option>' + years.map((y) => '<option' + (y === curY ? ' selected' : '') + '>' + y + '</option>').join('');
     render();
   } else if (msg.type === 'saved') {
     toast(msg.text || '已保存');

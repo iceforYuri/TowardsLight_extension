@@ -13,6 +13,7 @@ export interface PostMeta {
   category: string;
   tags: string[];
   draft: boolean;
+  featured: boolean;
   cover?: string;
   /** frontmatter 解析失败时为 false */
   valid: boolean;
@@ -37,6 +38,7 @@ export function parsePost(file: string): PostMeta {
       category: String(data.category ?? ''),
       tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
       draft: data.draft === true,
+      featured: data.featured === true,
       cover: typeof data.cover === 'string' ? data.cover : undefined,
       valid: true,
     };
@@ -51,6 +53,7 @@ export function parsePost(file: string): PostMeta {
       category: '',
       tags: [],
       draft: false,
+      featured: false,
       valid: false,
     };
   }
