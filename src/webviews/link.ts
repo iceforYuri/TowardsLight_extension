@@ -291,6 +291,7 @@ function doSaveGroup() {
 let dragId = null;
 let dragY = 0;
 let scrollRaf = 0;
+let edgeHold = 0;
 
 function sections() { return [...document.querySelectorAll('.lm-section')]; }
 
@@ -311,14 +312,20 @@ function markInsert(idx) {
   else if (secs.length) secs[secs.length - 1].classList.add('drop-after');
 }
 
-/** 指针贴近视口上/下缘时持续滚动,速度随贴近程度加快 */
+/** 指针贴近视口上/下缘时持续滚动:贴近程度决定基础速度,持续贴边再渐进加速 */
 function autoScroll() {
-  if (!dragId) { scrollRaf = 0; return; }
-  const EDGE = 72;
-  let dy = 0;
-  if (dragY < EDGE) dy = -((EDGE - dragY) / EDGE) * 14;
-  else if (dragY > innerHeight - EDGE) dy = ((dragY - innerHeight + EDGE) / EDGE) * 14;
-  if (dy) window.scrollBy(0, dy);
+  if (!dragId) { scrollRaf = 0; edgeHold = 0; return; }
+  const EDGE = 80;
+  let prox = 0; // -1..1,越贴近边缘绝对值越大
+  if (dragY < EDGE) prox = -(EDGE - dragY) / EDGE;
+  else if (dragY > innerHeight - EDGE) prox = (dragY - innerHeight + EDGE) / EDGE;
+  if (prox !== 0) {
+    edgeHold++;
+    const boost = 1 + Math.min(edgeHold / 40, 2.5); // 0.7s 左右爬满 3.5 倍
+    window.scrollBy(0, prox * 12 * boost);
+  } else {
+    edgeHold = 0;
+  }
   scrollRaf = requestAnimationFrame(autoScroll);
 }
 
