@@ -179,6 +179,15 @@ assert.throws(
 );
 ok('updateLink 改 URL + 重复拦截');
 
+// home 标志(首页展示,与 featured 独立):读、写、关
+const gh = core.readLinks(linksFile).find((l) => l.href === 'https://github.com');
+assert.equal(gh.home, true, 'showcase GitHub 应有 home: true');
+assert.equal(gh.featured, true, 'featured 与 home 独立');
+core.updateLink(linksFile, 'https://github.com', { home: false });
+assert.equal(core.readLinks(linksFile).find((l) => l.href === 'https://github.com').home, false, 'home 关闭后字段应移除');
+core.updateLink(linksFile, 'https://github.com', { home: true });
+ok('home 标志读/写/关(featured 独立)');
+
 const before1 = core.readLinks(linksFile).map((l) => l.href);
 core.moveLink(linksFile, before1[1], -1);
 const after1 = core.readLinks(linksFile).map((l) => l.href);

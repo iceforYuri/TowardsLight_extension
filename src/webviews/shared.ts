@@ -293,6 +293,7 @@ button.small:disabled { opacity: 0.45; cursor: default; transform: none; }
 .lm-meta { font-family: var(--mono); font-size: 11px; color: var(--faint); flex: none; max-width: 34%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lm-badge { font-size: 10px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--line-strong); color: var(--muted); font-family: var(--mono); flex: none; }
 .lm-badge.feat { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-soft); }
+.lm-badge.home { color: #3472a1; border-color: color-mix(in srgb, #3472a1 45%, transparent); background: color-mix(in srgb, #3472a1 10%, transparent); }
 .lm-ops { display: flex; gap: 2px; opacity: 0; transition: opacity 0.15s var(--ease); flex: none; }
 .lm-row:hover .lm-ops, .lm-ops:focus-within { opacity: 1; }
 .lm-ops button { border: 0; background: transparent; color: var(--muted); cursor: pointer; width: 26px; height: 26px; border-radius: 6px; font-size: 12.5px; display: grid; place-items: center; transition: background 0.15s, color 0.15s; }

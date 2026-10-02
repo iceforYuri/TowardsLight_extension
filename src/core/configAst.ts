@@ -307,7 +307,10 @@ export interface NewLink {
   groupLabel?: string;
   icon?: string;
   external?: boolean;
+  /** Links 页卡片形态(大图标) */
   featured?: boolean;
+  /** 首页「常用去处」展示,最多 3 个 */
+  home?: boolean;
   status?: string;
 }
 
@@ -337,6 +340,7 @@ export interface LinkItem {
   icon?: string;
   external: boolean;
   featured: boolean;
+  home: boolean;
   status?: string;
 }
 
@@ -369,6 +373,7 @@ export function readLinks(linksFile: string): LinkItem[] {
       icon: readStringProp(el, 'icon') || undefined,
       external: readBoolProp(el, 'external'),
       featured: readBoolProp(el, 'featured'),
+      home: readBoolProp(el, 'home'),
       status: readStringProp(el, 'status') || undefined,
     });
   }
@@ -437,7 +442,7 @@ export function updateLink(linksFile: string, href: string, patch: Partial<LinkI
       changed++;
     }
   }
-  for (const f of ['external', 'featured'] as const) {
+  for (const f of ['external', 'featured', 'home'] as const) {
     const v = patch[f];
     if (v === undefined) continue;
     const existing = getProp(obj, f);
@@ -645,6 +650,7 @@ export function addLink(linksFile: string, link: NewLink): void {
   if (link.icon) lines.push(`    icon: '${esc(link.icon)}',`);
   if (link.external) lines.push(`    external: true,`);
   if (link.featured) lines.push(`    featured: true,`);
+  if (link.home) lines.push(`    home: true,`);
   if (link.status) lines.push(`    status: '${esc(link.status)}',`);
   text = insertIntoLiteral(text, linksArr, `  {\n${lines.join('\n')}\n  }`);
   fs.writeFileSync(linksFile, text, 'utf8');

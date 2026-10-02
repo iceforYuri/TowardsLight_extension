@@ -95,7 +95,8 @@ function rowHtml(l, i, total) {
   return '<div class="lm-row">'
     + '<span class="lm-ico">' + svgOf(body) + '</span>'
     + '<div class="lm-main"><div class="lm-title">' + esc(l.title)
-    + (l.featured ? '<span class="lm-badge feat">featured</span>' : '')
+    + (l.featured ? '<span class="lm-badge feat">卡片</span>' : '')
+    + (l.home ? '<span class="lm-badge home">首页</span>' : '')
     + (l.external ? '<span class="lm-badge">↗</span>' : '')
     + '</div><div class="lm-desc">' + esc(l.description) + '</div></div>'
     + '<span class="lm-meta">' + esc(domainOf(l.href)) + (l.status ? ' · ' + esc(l.status) : '') + '</span>'
@@ -125,7 +126,8 @@ function linkEditorHtml(l, groupId) {
     + '<div class="icon-grid" id="ed_iconGrid"></div>'
     + '<div class="checks">'
     + '<label class="check-card"><input type="checkbox" id="ed_external"' + (l?.external !== false ? ' checked' : '') + '><span class="box">${CHECK_SVG}</span>外部链接(显示 ↗)</label>'
-    + '<label class="check-card"><input type="checkbox" id="ed_featured"' + (l?.featured ? ' checked' : '') + '><span class="box">${CHECK_SVG}</span>重点链接(首页展示)</label>'
+    + '<label class="check-card"><input type="checkbox" id="ed_featured"' + (l?.featured ? ' checked' : '') + '><span class="box">${CHECK_SVG}</span>大卡片(Links 页卡片形态)</label>'
+    + '<label class="check-card"><input type="checkbox" id="ed_home"' + (l?.home ? ' checked' : '') + '><span class="box">${CHECK_SVG}</span>首页展示(最多 3 个)</label>'
     + '</div>'
     + '<div class="actions"><button class="primary" data-act="save-link">' + (isNew ? '添加' : '保存修改') + '</button>'
     + '<button class="small" data-act="cancel">取消</button></div>'
@@ -254,6 +256,7 @@ function doSaveLink() {
     icon: $('ed_iconValue').value || undefined,
     external: $('ed_external').checked,
     featured: $('ed_featured').checked,
+    home: $('ed_home').checked,
     status: $('ed_status').value.trim() || undefined,
   };
   if (editing?.kind === 'link-edit') {
@@ -421,6 +424,11 @@ export function openLinkForm(): void {
         if (!v.href) throw new Error('URL 不能为空');
         if (!v.description) throw new Error('说明不能为空');
         if (!v.group) throw new Error('分组不能为空');
+        if (v.home) {
+          const key = msg.mode === 'edit' ? msg.key : '';
+          const homeCount = readLinks(profile.linksFile).filter((l) => l.home && l.href !== key).length;
+          if (homeCount >= 3) throw new Error('首页展示最多 3 个:先在别的链接上取消「首页展示」');
+        }
         if (msg.mode === 'edit') {
           updateLink(profile.linksFile, msg.key, {
             href: v.href,
@@ -431,6 +439,7 @@ export function openLinkForm(): void {
             status: v.status ?? '',
             external: v.external,
             featured: v.featured,
+            home: v.home,
           });
         } else {
           if (readLinks(profile.linksFile).some((l) => l.href === v.href)) {
