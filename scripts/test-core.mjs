@@ -289,6 +289,19 @@ assert.equal(core.slugify('Hello World 2026!'), 'hello-world-2026');
 assert.equal(core.slugify('中文标题'), '');
 ok('slugify 只留 ASCII,中文返回空交给用户手填');
 
+// setPostDraft:就地翻转 draft 行,其余字节不动;缺字段时插入
+core.setPostDraft(tmpPost, false);
+assert.equal(core.parsePost(tmpPost).draft, false, 'draft true→false');
+core.setPostDraft(tmpPost, true);
+assert.equal(core.parsePost(tmpPost).draft, true, 'draft false→true');
+const noDraft = path.join(tmp, 'no-draft.md');
+fs.writeFileSync(noDraft, '---\ntitle: 没有 draft 字段\ndescription: 测试\npubDate: 2026-10-01\ncategory: 随笔\ntags: []\n---\n\n正文\n');
+core.setPostDraft(noDraft, true);
+const ndText = fs.readFileSync(noDraft, 'utf8');
+assert.equal(core.parsePost(noDraft).draft, true, '缺字段时插入');
+assert.ok(ndText.includes('正文'), '正文不受影响');
+ok('setPostDraft 翻转/插入/保留正文');
+
 // ── profile 解析 ──
 const fakeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'tl-root-'));
 fs.mkdirSync(path.join(fakeRoot, 'src', 'profiles', 'showcase', 'posts'), { recursive: true });

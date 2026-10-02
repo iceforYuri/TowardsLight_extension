@@ -3,14 +3,13 @@ import path from 'node:path';
 import * as vscode from 'vscode';
 import { addIcon, lucideIconBody } from './core';
 import { articleImageDir, articleImageRef, copyImageIn } from './core/images';
-import { ConfigProvider } from './configView';
-import { PostNode, PostsProvider } from './posts';
-import { disposePreviewLog, disposeServer, listServers, onDidChangeServers, openPostPreview, openSitePreview, previewLog, reapOrphanServers, startJunctionWatch, startPreview, stopJunctionWatch, stopServer } from './preview';
-import { PreviewProvider, ServerNode } from './previewView';
+import { disposePreviewLog, disposeServer, listServers, openPostPreview, openSitePreview, previewLog, reapOrphanServers, startJunctionWatch, startPreview, stopJunctionWatch, stopServer } from './preview';
+import { SidebarProvider } from './sidebar';
 import { ensureJunctions, getProfile, getTemplateDir, guard, initUtil, openFile, pickImages, setTemplateDir, workspaceRoot } from './util';
 import { openCategoryForm } from './webviews/category';
 import { openLinkForm } from './webviews/link';
 import { openNewPostForm } from './webviews/newPost';
+import { openPostsCenter, refreshPostsCenter } from './webviews/postsCenter';
 import { openSiteConfigForm } from './webviews/siteConfig';
 
 async function addIconCommand(context: vscode.ExtensionContext): Promise<void> {
@@ -241,13 +240,10 @@ export function activate(context: vscode.ExtensionContext): void {
   }
   startJunctionWatch();
 
-  const postsProvider = new PostsProvider();
-  const configProvider = new ConfigProvider();
-  const previewProvider = new PreviewProvider();
+  const sidebar = new SidebarProvider();
   const refreshAll = () => {
-    postsProvider.refresh();
-    configProvider.refresh();
-    previewProvider.refresh();
+    sidebar.refresh();
+    refreshPostsCenter();
     watchPosts();
   };
 
@@ -269,27 +265,25 @@ export function activate(context: vscode.ExtensionContext): void {
   watchPosts();
 
   context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('towardsLightPosts', postsProvider),
-    vscode.window.registerTreeDataProvider('towardsLightConfig', configProvider),
-    vscode.window.registerTreeDataProvider('towardsLightPreview', previewProvider),
-    onDidChangeServers(() => previewProvider.refresh()),
-    vscode.commands.registerCommand('towardsLight.refreshPosts', () => postsProvider.refresh()),
+    vscode.window.registerWebviewViewProvider('towardsLightHome', sidebar),
+    sidebar.listenServers(),
+    vscode.commands.registerCommand('towardsLight.refreshPosts', () => refreshAll()),
     vscode.commands.registerCommand('towardsLight.switchProfile', guard(() => switchProfileCommand(context, refreshAll))),
     vscode.commands.registerCommand('towardsLight.selectTemplateDir', guard(() => selectTemplateDirCommand(refreshAll))),
     vscode.commands.registerCommand('towardsLight.startPreview', guard(() => startPreviewCommand())),
     vscode.commands.registerCommand('towardsLight.showServerLog', () => previewLog().show()),
-    vscode.commands.registerCommand('towardsLight.stopServer', guard((node?: ServerNode) => {
-      if (node) stopServer(node.rec);
-    })),
-    vscode.commands.registerCommand('towardsLight.newPost', guard(() => openNewPostForm(() => postsProvider.refresh()))),
+    vscode.commands.registerCommand('towardsLight.stopServerAt', (port: number) => {
+      const rec = listServers().find((s) => s.port === port);
+      if (rec) stopServer(rec);
+    }),
+    vscode.commands.registerCommand('towardsLight.openPostsCenter', guard(() => openPostsCenter())),
+    vscode.commands.registerCommand('towardsLight.newPost', guard(() => openNewPostForm(() => refreshAll()))),
     vscode.commands.registerCommand(
       'towardsLight.openPostPreview',
-      guard(async (node?: PostNode) => {
-        const file =
-          node?.post?.file ??
-          (vscode.window.activeTextEditor?.document.fileName.endsWith('.md')
-            ? vscode.window.activeTextEditor?.document.fileName
-            : undefined);
+      guard(async () => {
+        const file = vscode.window.activeTextEditor?.document.fileName.endsWith('.md')
+          ? vscode.window.activeTextEditor?.document.fileName
+          : undefined;
         await openPostPreview(file);
       }),
     ),

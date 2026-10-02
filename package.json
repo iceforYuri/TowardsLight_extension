@@ -2,7 +2,7 @@
   "name": "towards-light-editor",
   "displayName": "TowardsLight 博客工具",
   "description": "TowardsLight 博客的文章管理、写作预览与站点配置工具(本地扩展)",
-  "version": "0.9.2",
+  "version": "0.10.0",
   "private": true,
   "publisher": "towardslight",
   "license": "MIT",
@@ -42,25 +42,12 @@
     "views": {
       "towardsLight": [
         {
-          "id": "towardsLightPosts",
-          "name": "文章"
-        },
-        {
-          "id": "towardsLightConfig",
-          "name": "站点配置"
-        },
-        {
-          "id": "towardsLightPreview",
-          "name": "预览"
+          "id": "towardsLightHome",
+          "name": "控制台",
+          "type": "webview"
         }
       ]
     },
-    "viewsWelcome": [
-      {
-        "view": "towardsLightPosts",
-        "contents": "还没有文章。\n[新建文章](command:towardsLight.newPost)"
-      }
-    ],
     "commands": [
       {
         "command": "towardsLight.refreshPosts",
@@ -126,51 +113,17 @@
         "icon": "$(play)"
       },
       {
-        "command": "towardsLight.stopServer",
-        "title": "停止预览",
-        "icon": "$(debug-stop)"
-      },
-      {
         "command": "towardsLight.showServerLog",
         "title": "查看预览日志",
         "icon": "$(output)"
+      },
+      {
+        "command": "towardsLight.openPostsCenter",
+        "title": "文章中心",
+        "icon": "$(edit)"
       }
     ],
     "menus": {
-      "view/title": [
-        {
-          "command": "towardsLight.newPost",
-          "when": "view == towardsLightPosts",
-          "group": "navigation@1"
-        },
-        {
-          "command": "towardsLight.refreshPosts",
-          "when": "view == towardsLightPosts",
-          "group": "navigation@2"
-        },
-        {
-          "command": "towardsLight.showServerLog",
-          "when": "view == towardsLightPreview",
-          "group": "navigation@1"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "towardsLight.openPostPreview",
-          "when": "view == towardsLightPosts && viewItem == post",
-          "group": "inline"
-        },
-        {
-          "command": "towardsLight.stopServer",
-          "when": "view == towardsLightPreview && viewItem == server",
-          "group": "inline"
-        },
-        {
-          "command": "towardsLight.showServerLog",
-          "when": "view == towardsLightPreview && viewItem == server",
-          "group": "inline"
-        }
-      ],
       "editor/context": [
         {
           "command": "towardsLight.insertImage",

@@ -9,9 +9,11 @@ export interface PostMeta {
   description: string;
   /** YYYY-MM-DD,解析失败为空串 */
   pubDate: string;
+  updatedDate: string;
   category: string;
   tags: string[];
   draft: boolean;
+  cover?: string;
   /** frontmatter 解析失败时为 false */
   valid: boolean;
 }
@@ -31,9 +33,11 @@ export function parsePost(file: string): PostMeta {
       title: String(data.title ?? slug),
       description: String(data.description ?? ''),
       pubDate: toDateString(data.pubDate),
+      updatedDate: toDateString(data.updatedDate),
       category: String(data.category ?? ''),
       tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
       draft: data.draft === true,
+      cover: typeof data.cover === 'string' ? data.cover : undefined,
       valid: true,
     };
   } catch {
@@ -43,6 +47,7 @@ export function parsePost(file: string): PostMeta {
       title: slug,
       description: '',
       pubDate: '',
+      updatedDate: '',
       category: '',
       tags: [],
       draft: false,
@@ -119,3 +124,21 @@ export function slugify(title: string): string {
 }
 
 export const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+
+/**
+ * 就地切换 draft 字段:只动 frontmatter 里那一行,其余字节原样保留。
+ * 缺 draft 字段时插到 frontmatter 末尾。
+ */
+export function setPostDraft(file: string, draft: boolean): void {
+  const text = fs.readFileSync(file, 'utf8');
+  const nl = text.includes('\r\n') ? '\r\n' : '\n';
+  const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!m) throw new Error(`${path.basename(file)}: frontmatter 缺失`);
+  let fm = m[1];
+  if (/^draft:.*$/m.test(fm)) {
+    fm = fm.replace(/^draft:.*$/m, `draft: ${draft}`);
+  } else {
+    fm = `${fm.trimEnd()}${nl}draft: ${draft}`;
+  }
+  fs.writeFileSync(file, text.replace(m[0], `---${nl}${fm}${nl}---`), 'utf8');
+}
