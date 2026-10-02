@@ -103,7 +103,7 @@ label.f {
 }
 .card label.f:first-of-type { margin-top: 0; }
 label.f .req { color: var(--err); text-transform: none; letter-spacing: 0; }
-input[type=text], input[type=url], textarea, select {
+input[type=text], input[type=url], input[type=search], textarea, select {
   width: 100%; padding: 7px 10px; font: inherit;
   color: var(--vscode-input-foreground, var(--fg));
   background: var(--input-bg);

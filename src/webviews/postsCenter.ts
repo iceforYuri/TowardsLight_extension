@@ -8,56 +8,86 @@ import { pageShell, SCRIPT_PREAMBLE } from './shared';
 let panel: vscode.WebviewPanel | undefined;
 let openedProfile: ReturnType<typeof getProfile> | undefined;
 
+const ICONS = {
+  edit: '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
+  eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+  up: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>',
+  down: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+};
+
 function body(): string {
   return `
 <style>
-.toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
-.toolbar input[type="search"] { flex: 1; min-width: 180px; }
-.toolbar select { min-width: 108px; }
+.toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+.toolbar input[type="search"] { flex: 1; min-width: 160px; background: transparent; border-color: var(--line); }
+.toolbar input[type="search"]:hover { border-color: var(--line-strong); }
+.toolbar select { min-width: 96px; }
 .toolbar .count { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-left: auto; }
 
-.batchbar { display: none; align-items: center; gap: 8px; padding: 10px 14px; margin-bottom: 12px;
-  border: 1px solid var(--accent); border-radius: 10px; background: var(--accent-soft);
-  font-size: 12.5px; position: sticky; top: 8px; z-index: 20; }
+.batchbar { display: none; align-items: center; gap: 6px; padding: 8px 12px; margin-bottom: 10px;
+  border: 1px solid var(--accent); border-radius: 9px; background: var(--accent-soft); font-size: 12px; }
 .batchbar.on { display: flex; }
 .batchbar .n { font-family: var(--mono); font-weight: 600; color: var(--accent); }
 
-.plist { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
-.prow { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-top: 1px solid var(--line);
-  background: var(--bg); transition: background 0.15s var(--ease); }
-.prow:first-child { border-top: 0; }
-.prow:hover { background: var(--raise); }
-.prow.selected { background: var(--accent-soft); }
-.prow .ck { width: 15px; height: 15px; accent-color: var(--accent); flex: none; cursor: pointer; }
-.prow .thumb { width: 46px; height: 46px; border-radius: 8px; object-fit: cover; flex: none;
-  border: 1px solid var(--line); background: var(--raise); }
-.prow .thumb.none { display: grid; place-items: center; color: var(--faint); font-family: var(--mono); font-size: 10px; }
-.pmain { flex: 1; min-width: 0; }
-.ptitle { font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-.ptitle .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pdesc { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
-.pmeta { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-top: 3px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pmeta .cat { color: var(--muted); }
-.pstatus { font-family: var(--mono); font-size: 10.5px; padding: 2px 9px; border-radius: 99px; flex: none; }
+.ptable { width: 100%; border-collapse: collapse; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.ptable th { font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--faint); text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line);
+  background: var(--bg); position: sticky; top: 0; user-select: none; white-space: nowrap; }
+.ptable th[data-sort] { cursor: pointer; }
+.ptable th[data-sort]:hover { color: var(--fg); }
+.ptable th .arr { color: var(--accent); }
+.ptable td { padding: 7px 10px; border-top: 1px solid var(--line); vertical-align: middle; }
+.ptable tbody tr { transition: background 0.12s ease; }
+.ptable tbody tr:hover { background: var(--raise); }
+.ptable tbody tr.selected { background: var(--accent-soft); }
+
+.c-ck { width: 28px; }
+.c-ck input { width: 14px; height: 14px; accent-color: var(--accent); cursor: pointer; }
+.c-thumb { width: 44px; }
+.c-date { width: 92px; }
+.c-cat { width: 96px; }
+.c-status { width: 64px; }
+.c-ops { width: 128px; }
+
+.thumb { width: 36px; height: 36px; border-radius: 7px; object-fit: cover; border: 1px solid var(--line);
+  background: var(--raise); display: block; }
+.thumb.none { display: grid; place-items: center; color: var(--faint); font-family: var(--mono); font-size: 10px; }
+
+.t-title { font-size: 13px; font-weight: 600; display: block; }
+.t-slug { font-family: var(--mono); font-size: 10.5px; color: var(--faint); display: block; margin-top: 1px; }
+.td-date, .td-cat { font-family: var(--mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.td-cat { color: var(--fg); }
+.td-tags { font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: nowrap;
+  max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.td-tags .more { color: var(--faint); }
+
+.pstatus { font-family: var(--mono); font-size: 10px; padding: 1px 8px; border-radius: 99px; white-space: nowrap; }
 .pstatus.draft { color: #b07a2f; background: color-mix(in srgb, #b07a2f 12%, transparent); border: 1px solid color-mix(in srgb, #b07a2f 40%, transparent); }
 .pstatus.pub { color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, transparent); border: 1px solid color-mix(in srgb, var(--ok) 35%, transparent); }
 .pstatus.bad { color: var(--err); background: color-mix(in srgb, var(--err) 10%, transparent); border: 1px solid color-mix(in srgb, var(--err) 35%, transparent); }
-.pops { display: flex; gap: 4px; flex: none; }
-.pops button { font-size: 11.5px; padding: 4px 10px; }
-.pempty { padding: 42px 0; text-align: center; color: var(--muted); font-size: 12.5px; }
+
+.td-ops { white-space: nowrap; }
+.iop { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px;
+  border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease; }
+.iop svg { width: 14px; height: 14px; }
+.iop:hover { background: var(--raise-2); color: var(--fg); }
+.iop.del:hover { color: var(--err); }
+.pempty { text-align: center; color: var(--muted); font-size: 12.5px; padding: 40px 0 !important; }
 </style>
 
 <div class="kicker">Towards Light · Studio</div>
 <h1>文章中心</h1>
-<p class="sub">当前档案的全部文章。勾选后可批量发布、转草稿或删除(回收站,可恢复)。</p>
+<p class="sub">当前档案的全部文章。勾选后可批量发布、转草稿或删除(回收站,可恢复)。列头点击排序。</p>
 
 <div class="toolbar">
-  <input type="search" id="q" placeholder="搜索标题 / 描述 / 标签…" aria-label="搜索文章">
+  <input type="search" id="q" placeholder="搜索标题 / 描述 / 标签 / slug…" aria-label="搜索文章">
   <select id="fStatus" aria-label="按状态筛选">
     <option value="">全部状态</option><option value="pub">已发布</option><option value="draft">草稿</option>
   </select>
   <select id="fCat" aria-label="按分类筛选"><option value="">全部分类</option></select>
+  <select id="fTag" aria-label="按标签筛选"><option value="">全部标签</option></select>
   <span class="count" id="count"></span>
   <button class="primary" id="newPost">新建文章</button>
 </div>
@@ -71,7 +101,19 @@ function body(): string {
 </div>
 <div class="error" id="error"></div>
 
-<div class="plist" id="list"></div>
+<table class="ptable">
+  <thead><tr>
+    <th class="c-ck"><input type="checkbox" id="selAll" aria-label="全选"></th>
+    <th class="c-thumb"></th>
+    <th data-sort="title">标题 <span class="arr"></span></th>
+    <th class="c-date" data-sort="pubDate">日期 <span class="arr"></span></th>
+    <th class="c-cat" data-sort="category">分类 <span class="arr"></span></th>
+    <th>标签</th>
+    <th class="c-status">状态</th>
+    <th class="c-ops"></th>
+  </tr></thead>
+  <tbody id="rows"></tbody>
+</table>
 `;
 }
 
@@ -79,22 +121,33 @@ function script(): string {
   return (
     SCRIPT_PREAMBLE +
     `
+const ICONS = ${JSON.stringify(ICONS)};
 let posts = [];
 let thumbs = {};
 const sel = new Set();
+const sort = { key: 'pubDate', dir: -1 };
 
 function escLocal(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]); }
+function icon(name) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + ICONS[name] + '</svg>'; }
 
 function filtered() {
   const q = $('q').value.trim().toLowerCase();
   const st = $('fStatus').value;
   const cat = $('fCat').value;
-  return posts.filter((p) => {
+  const tag = $('fTag').value;
+  const list = posts.filter((p) => {
     if (st && (st === 'draft') !== p.draft) return false;
     if (cat && p.category !== cat) return false;
+    if (tag && !p.tags.includes(tag)) return false;
     if (!q) return true;
     const hay = (p.title + ' ' + p.description + ' ' + p.tags.join(' ') + ' ' + p.slug).toLowerCase();
     return q.split(/\\s+/).every((w) => hay.includes(w));
+  });
+  const { key, dir } = sort;
+  return list.sort((a, b) => {
+    const va = (a[key] ?? '').toString().toLowerCase();
+    const vb = (b[key] ?? '').toString().toLowerCase();
+    return va < vb ? -dir : va > vb ? dir : 0;
   });
 }
 
@@ -107,46 +160,67 @@ function rowHtml(p) {
   const thumb = thumbs[p.file]
     ? '<img class="thumb" src="' + thumbs[p.file] + '" alt="">'
     : '<span class="thumb none">—</span>';
-  const meta = [p.pubDate, p.updatedDate && '更 ' + p.updatedDate].filter(Boolean).join(' · ');
-  const tags = p.tags.slice(0, 4).map((t) => '#' + t).join(' ');
-  return '<div class="prow' + (sel.has(p.file) ? ' selected' : '') + '" data-file="' + escLocal(p.file) + '">'
-    + '<input type="checkbox" class="ck" data-act="sel" ' + (sel.has(p.file) ? 'checked' : '') + ' aria-label="选择">'
-    + thumb
-    + '<div class="pmain"><div class="ptitle"><span class="t">' + escLocal(p.title) + '</span>' + statusBadge(p) + '</div>'
-    + '<div class="pdesc">' + escLocal(p.description) + '</div>'
-    + '<div class="pmeta">' + escLocal(meta) + (p.category ? ' · <span class="cat">' + escLocal(p.category) + '</span>' : '') + (tags ? ' · ' + escLocal(tags) : '') + '</div></div>'
-    + '<div class="pops">'
-    + '<button data-act="open">打开</button>'
-    + '<button data-act="preview">预览</button>'
-    + '<button data-act="toggle">' + (p.draft ? '发布' : '转草稿') + '</button>'
-    + '<button data-act="del">删除</button>'
-    + '</div></div>';
+  const tags = p.tags.slice(0, 3).map((t) => '#' + t).join(' ');
+  const more = p.tags.length > 3 ? '<span class="more"> +' + (p.tags.length - 3) + '</span>' : '';
+  return '<tr data-file="' + escLocal(p.file) + '"' + (sel.has(p.file) ? ' class="selected"' : '') + '>'
+    + '<td class="c-ck"><input type="checkbox" data-act="sel" ' + (sel.has(p.file) ? 'checked' : '') + ' aria-label="选择"></td>'
+    + '<td class="c-thumb">' + thumb + '</td>'
+    + '<td><span class="t-title" title="' + escLocal(p.description) + '">' + escLocal(p.title) + '</span><span class="t-slug">' + escLocal(p.slug) + (p.updatedDate ? ' · 更 ' + escLocal(p.updatedDate) : '') + '</span></td>'
+    + '<td class="td-date">' + escLocal(p.pubDate) + '</td>'
+    + '<td class="td-cat">' + escLocal(p.category) + '</td>'
+    + '<td class="td-tags">' + escLocal(tags) + more + '</td>'
+    + '<td class="c-status">' + statusBadge(p) + '</td>'
+    + '<td class="td-ops">'
+    + '<button class="iop" data-act="open" title="打开编辑">' + icon('edit') + '</button>'
+    + '<button class="iop" data-act="preview" title="预览">' + icon('eye') + '</button>'
+    + '<button class="iop" data-act="toggle" title="' + (p.draft ? '发布' : '转为草稿') + '">' + icon(p.draft ? 'up' : 'down') + '</button>'
+    + '<button class="iop del" data-act="del" title="删除(回收站)">' + icon('x') + '</button>'
+    + '</td></tr>';
 }
 
 function render() {
   const list = filtered();
   $('count').textContent = list.length + ' / ' + posts.length + ' 篇';
-  $('list').innerHTML = list.length
+  $('rows').innerHTML = list.length
     ? list.map(rowHtml).join('')
-    : '<div class="pempty">没有匹配的文章</div>';
+    : '<tr><td class="pempty" colspan="8">没有匹配的文章</td></tr>';
+  document.querySelectorAll('th[data-sort]').forEach((th) => {
+    th.querySelector('.arr').textContent = th.dataset.sort === sort.key ? (sort.dir > 0 ? '↑' : '↓') : '';
+  });
   const bar = $('batchbar');
   bar.classList.toggle('on', sel.size > 0);
   $('batchN').textContent = sel.size;
+  const visible = list.map((p) => p.file);
+  $('selAll').checked = visible.length > 0 && visible.every((f) => sel.has(f));
 }
 
-$('q').addEventListener('input', render);
-$('fStatus').addEventListener('change', render);
-$('fCat').addEventListener('change', render);
+['q', 'fStatus', 'fCat', 'fTag'].forEach((id) => {
+  $(id).addEventListener(id === 'q' ? 'input' : 'change', render);
+});
 $('newPost').addEventListener('click', () => vscode.postMessage({ type: 'newPost' }));
 
-$('list').addEventListener('click', (e) => {
+document.querySelectorAll('th[data-sort]').forEach((th) =>
+  th.addEventListener('click', () => {
+    if (sort.key === th.dataset.sort) sort.dir = -sort.dir;
+    else { sort.key = th.dataset.sort; sort.dir = th.dataset.sort === 'pubDate' ? -1 : 1; }
+    render();
+  }),
+);
+
+$('selAll').addEventListener('change', (e) => {
+  const visible = filtered().map((p) => p.file);
+  if (e.target.checked) visible.forEach((f) => sel.add(f));
+  else visible.forEach((f) => sel.delete(f));
+  render();
+});
+
+$('rows').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-act]');
   if (!btn) return;
-  const file = btn.closest('.prow').dataset.file;
+  const file = btn.closest('tr').dataset.file;
   const act = btn.dataset.act;
   if (act === 'sel') {
     btn.checked ? sel.add(file) : sel.delete(file);
-    btn.closest('.prow').classList.toggle('selected', btn.checked);
     render();
     return;
   }
@@ -176,8 +250,13 @@ window.addEventListener('message', (e) => {
     thumbs = msg.thumbs || {};
     sel.forEach((f) => { if (!posts.some((p) => p.file === f)) sel.delete(f); });
     const cats = [...new Set(posts.map((p) => p.category).filter(Boolean))].sort();
-    const cur = $('fCat').value;
-    $('fCat').innerHTML = '<option value="">全部分类</option>' + cats.map((c) => '<option' + (c === cur ? ' selected' : '') + '>' + escLocal(c) + '</option>').join('');
+    const curC = $('fCat').value;
+    $('fCat').innerHTML = '<option value="">全部分类</option>' + cats.map((c) => '<option' + (c === curC ? ' selected' : '') + '>' + escLocal(c) + '</option>').join('');
+    const tagCount = {};
+    posts.forEach((p) => p.tags.forEach((t) => (tagCount[t] = (tagCount[t] || 0) + 1)));
+    const tags = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).map(([t]) => t);
+    const curT = $('fTag').value;
+    $('fTag').innerHTML = '<option value="">全部标签</option>' + tags.map((t) => '<option' + (t === curT ? ' selected' : '') + '>' + escLocal(t) + '</option>').join('');
     render();
   } else if (msg.type === 'saved') {
     toast(msg.text || '已保存');
@@ -209,7 +288,7 @@ export function refreshPostsCenter(): void {
       assertProfileUnchanged(openedProfile);
       sendInit();
     } catch {
-      /* 档案已切换:面板留着旧数据,用户在顶部徽章能看到 */
+      /* 档案已切换:面板留着旧数据,顶部徽章可见 */
     }
   }
 }
