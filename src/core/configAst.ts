@@ -396,11 +396,26 @@ function insertLinesBeforeClose(text: string, node: Node, lines: string[]): stri
 }
 
 /** 就地修改链接(href 是 key,不可改);icon/status 传空串=删除该字段,布尔 false=移除 */
-export function updateLink(linksFile: string, href: string, patch: Partial<Omit<LinkItem, 'href'>>): number {
+/** 更新链接(key 是原 href)。patch.href 允许改 URL:去重校验后写新值 */
+export function updateLink(linksFile: string, href: string, patch: Partial<LinkItem>): number {
   const project = newProject();
   const sf = project.addSourceFileAtPath(linksFile);
-  const obj = findLink(techLinksArray(sf), href);
+  const arr = techLinksArray(sf);
+  const obj = findLink(arr, href);
   let changed = 0;
+
+  if (patch.href !== undefined && patch.href !== href) {
+    if (!patch.href.trim()) throw new Error('URL 不能为空');
+    const dup = arr
+      .getElements()
+      .some(
+        (e) =>
+          Node.isObjectLiteralExpression(e) &&
+          readStringProp(e, 'href') === patch.href,
+      );
+    if (dup) throw new Error(`已存在同 URL 的链接:${patch.href}`);
+    if (writeStringProp(obj, 'href', patch.href)) changed++;
+  }
 
   for (const f of ['title', 'description', 'group'] as const) {
     if (patch[f] !== undefined && writeStringProp(obj, f, patch[f])) changed++;

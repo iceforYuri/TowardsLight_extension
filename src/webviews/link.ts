@@ -21,7 +21,7 @@ function body(): string {
   return `
 <div class="kicker">Towards Light · Studio</div>
 <h1>链接管理</h1>
-<p class="sub">写回当前档案的 links.ts。顺序即页面展示顺序;URL 是每条链接的 key,不可改,要换地址就删除重建。</p>
+<p class="sub">写回当前档案的 links.ts。顺序即页面展示顺序;URL 可改,但不能与现有链接重复。</p>
 <div class="layout">
   <nav class="toc" id="toc"></nav>
   <div class="main" id="main"></div>
@@ -115,7 +115,7 @@ function linkEditorHtml(l, groupId) {
   const opts = groups.map((g) => '<option value="' + esc(g.id) + '"' + (g.id === groupId ? ' selected' : '') + '>' + esc(g.label) + ' · ' + esc(g.id) + '</option>').join('');
   return '<div class="lm-editor">'
     + '<div class="row"><div><label class="f">名称 <span class="req">*</span></label><input type="text" id="ed_title" value="' + esc(l?.title) + '"></div>'
-    + '<div><label class="f">URL <span class="req">*</span></label><input type="url" id="ed_href" value="' + esc(l?.href) + '"' + (isNew ? '' : ' disabled title="URL 是链接的 key,不可改"') + '></div></div>'
+    + '<div><label class="f">URL <span class="req">*</span></label><input type="url" id="ed_href" value="' + esc(l?.href) + '"></div></div>'
     + '<label class="f">一句话说明 <span class="req">*</span></label><input type="text" id="ed_desc" value="' + esc(l?.description) + '">'
     + '<div class="row"><div><label class="f">分组</label><select id="ed_group">' + opts + '</select></div>'
     + '<div><label class="f">状态文字</label><input type="text" id="ed_status" value="' + esc(l?.status) + '" placeholder="可选"></div></div>'
@@ -258,7 +258,7 @@ function doSaveLink() {
   };
   if (editing?.kind === 'link-edit') {
     const l = links.find((x) => x.href === editing.key);
-    if (l) Object.assign(l, value, { href: editing.key });
+    if (l) Object.assign(l, value);
     vscode.postMessage({ type: 'save', mode: 'edit', key: editing.key, value });
   } else {
     links.push(value);
@@ -423,6 +423,7 @@ export function openLinkForm(): void {
         if (!v.group) throw new Error('分组不能为空');
         if (msg.mode === 'edit') {
           updateLink(profile.linksFile, msg.key, {
+            href: v.href,
             title: v.title,
             description: v.description,
             group: v.group,

@@ -169,6 +169,16 @@ assert.equal(ex.external, false, 'external 转 false 应移除该字段');
 assert.equal(ex.status, '不再常用');
 ok('updateLink 字段增删改');
 
+// updateLink 改 URL:key 是原 href,新 URL 去重校验
+core.updateLink(linksFile, 'https://example.com', { href: 'https://example.org' });
+assert.ok(core.readLinks(linksFile).some((l) => l.href === 'https://example.org'), 'URL 应改成功');
+assert.ok(!core.readLinks(linksFile).some((l) => l.href === 'https://example.com'), '旧 URL 应消失');
+assert.throws(
+  () => core.updateLink(linksFile, 'https://example.org', { href: 'https://pinia.vuejs.org' }),
+  /已存在同 URL/,
+);
+ok('updateLink 改 URL + 重复拦截');
+
 const before1 = core.readLinks(linksFile).map((l) => l.href);
 core.moveLink(linksFile, before1[1], -1);
 const after1 = core.readLinks(linksFile).map((l) => l.href);
