@@ -42,6 +42,8 @@ function body(): string {
 .ptable th[data-sort] { cursor: pointer; }
 .ptable th[data-sort]:hover { color: var(--fg); }
 .ptable th .arr { color: var(--accent); }
+.ptable th .th-hint { font-size: 9.5px; letter-spacing: 0; text-transform: none; font-weight: 400;
+  color: var(--faint); margin-left: 6px; }
 .ptable td { padding: 7px 10px; border-top: 1px solid var(--line); vertical-align: middle; }
 .ptable tbody tr { transition: background 0.12s ease; }
 .ptable tbody tr:hover { background: var(--raise); }
@@ -118,7 +120,7 @@ function body(): string {
   <thead><tr>
     <th class="c-ck"><input type="checkbox" id="selAll" aria-label="全选"></th>
     <th class="c-thumb"></th>
-    <th data-sort="title">标题 <span class="arr"></span></th>
+    <th data-sort="title">标题 <span class="arr"></span><span class="th-hint">点击标题可编辑</span></th>
     <th class="c-date" data-sort="pubDate">日期 <span class="arr"></span></th>
     <th class="c-cat" data-sort="category">分类 <span class="arr"></span></th>
     <th>标签</th>
