@@ -302,6 +302,33 @@ assert.equal(core.parsePost(noDraft).draft, true, '缺字段时插入');
 assert.ok(ndText.includes('正文'), '正文不受影响');
 ok('setPostDraft 翻转/插入/保留正文');
 
+// updatePostMeta:就地改写多字段,正文与未知字段原样保留;null 删字段
+const metaPost = path.join(tmp, 'meta-post.md');
+fs.writeFileSync(
+  metaPost,
+  '---\ntitle: 原标题\ndescription: 旧描述\npubDate: 2026-09-01\ncategory: 随笔\ntags: [旧]\ndraft: true\ncover: image/meta-post/a.jpg\ncoverAlt: 旧图\ncustomField: 别动我\n---\n\n正文内容不要动\n',
+);
+core.updatePostMeta(metaPost, {
+  title: '新标题:带冒号',
+  tags: ['新', '标签'],
+  draft: false,
+  featured: true,
+  cover: null,
+  coverAlt: null,
+  updatedDate: '2026-10-03',
+});
+const afterMeta = core.parsePost(metaPost);
+assert.equal(afterMeta.title, '新标题:带冒号');
+assert.deepEqual(afterMeta.tags, ['新', '标签']);
+assert.equal(afterMeta.draft, false);
+assert.equal(afterMeta.featured, true);
+assert.equal(afterMeta.cover, undefined, 'cover 传 null 应删除');
+assert.equal(afterMeta.updatedDate, '2026-10-03');
+const afterText = fs.readFileSync(metaPost, 'utf8');
+assert.ok(afterText.includes('customField: 别动我'), '未知字段保留');
+assert.ok(afterText.includes('正文内容不要动'), '正文保留');
+ok('updatePostMeta 就地改写 + 删字段 + 保留正文与未知字段');
+
 // ── profile 解析 ──
 const fakeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'tl-root-'));
 fs.mkdirSync(path.join(fakeRoot, 'src', 'profiles', 'showcase', 'posts'), { recursive: true });

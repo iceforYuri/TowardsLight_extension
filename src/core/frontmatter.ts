@@ -15,6 +15,8 @@ export interface PostMeta {
   draft: boolean;
   featured: boolean;
   cover?: string;
+  coverAlt?: string;
+  coverPosition?: string;
   /** frontmatter 解析失败时为 false */
   valid: boolean;
 }
@@ -40,6 +42,8 @@ export function parsePost(file: string): PostMeta {
       draft: data.draft === true,
       featured: data.featured === true,
       cover: typeof data.cover === 'string' ? data.cover : undefined,
+      coverAlt: typeof data.coverAlt === 'string' ? data.coverAlt : undefined,
+      coverPosition: typeof data.coverPosition === 'string' ? data.coverPosition : undefined,
       valid: true,
     };
   } catch {
@@ -128,6 +132,53 @@ export function slugify(title: string): string {
 
 export const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
+/**
+ * 就地更新文章 frontmatter 元数据:逐行改写已知字段,正文与未知字段原样保留。
+ * 值为 null 表示删除该字段;标量经 yamlScalar 安全序列化。
+ */
+export interface PostMetaPatch {
+  title?: string;
+  description?: string;
+  pubDate?: string;
+  category?: string;
+  tags?: string[];
+  draft?: boolean;
+  featured?: boolean;
+  cover?: string | null;
+  coverAlt?: string | null;
+  coverPosition?: string | null;
+  updatedDate?: string | null;
+}
+
+export function updatePostMeta(file: string, patch: PostMetaPatch): void {
+  const text = fs.readFileSync(file, 'utf8');
+  const nl = text.includes('\r\n') ? '\r\n' : '\n';
+  const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!m) throw new Error(`${path.basename(file)}: frontmatter 缺失`);
+  const lines = m[1].split(/\r?\n/);
+  const setLine = (key: string, value: string | null) => {
+    const i = lines.findIndex((l) => new RegExp(`^${key}:`).test(l));
+    if (value === null) {
+      if (i >= 0) lines.splice(i, 1);
+      return;
+    }
+    if (i >= 0) lines[i] = `${key}: ${value}`;
+    else lines.push(`${key}: ${value}`);
+  };
+  if (patch.title !== undefined) setLine('title', yamlScalar(patch.title));
+  if (patch.description !== undefined) setLine('description', yamlScalar(patch.description));
+  if (patch.pubDate !== undefined) setLine('pubDate', patch.pubDate);
+  if (patch.category !== undefined) setLine('category', yamlScalar(patch.category));
+  if (patch.tags !== undefined) setLine('tags', `[${patch.tags.map(yamlScalar).join(', ')}]`);
+  if (patch.draft !== undefined) setLine('draft', String(patch.draft));
+  if (patch.featured !== undefined) setLine('featured', String(patch.featured));
+  if (patch.cover !== undefined) setLine('cover', patch.cover === null ? null : yamlScalar(patch.cover));
+  if (patch.coverAlt !== undefined) setLine('coverAlt', patch.coverAlt === null ? null : yamlScalar(patch.coverAlt));
+  if (patch.coverPosition !== undefined)
+    setLine('coverPosition', patch.coverPosition === null ? null : yamlScalar(patch.coverPosition));
+  if (patch.updatedDate !== undefined) setLine('updatedDate', patch.updatedDate);
+  fs.writeFileSync(file, text.replace(m[0], `---${nl}${lines.join(nl)}${nl}---`), 'utf8');
+}
 /**
  * 就地切换 draft 字段:只动 frontmatter 里那一行,其余字节原样保留。
  * 缺 draft 字段时插到 frontmatter 末尾。

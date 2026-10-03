@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { listPosts, setPostDraft } from '../core';
 import { openPostPreview } from '../preview';
 import { getProfile, assertProfileUnchanged, openFile, resolveImageUri } from '../util';
-import { openNewPostForm } from './newPost';
+import { openNewPostForm, openPostEditor } from './newPost';
 import { pageShell, SCRIPT_PREAMBLE } from './shared';
 
 let panel: vscode.WebviewPanel | undefined;
@@ -59,7 +59,8 @@ function body(): string {
   background: var(--raise); display: block; }
 .thumb.none { display: grid; place-items: center; color: var(--faint); font-family: var(--mono); font-size: 10px; }
 
-.t-title { font-size: 13px; font-weight: 600; display: block; }
+.t-title { font-size: 13px; font-weight: 600; display: block; cursor: pointer; width: fit-content; }
+.t-title:hover { color: var(--accent); }
 .t-slug { font-family: var(--mono); font-size: 10.5px; color: var(--faint); display: block; margin-top: 1px; }
 .td-date, .td-cat { font-family: var(--mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
 .td-cat { color: var(--fg); }
@@ -183,13 +184,13 @@ function rowHtml(p) {
   return '<tr data-file="' + escLocal(p.file) + '"' + (sel.has(p.file) ? ' class="selected"' : '') + '>'
     + '<td class="c-ck"><input type="checkbox" data-act="sel" ' + (sel.has(p.file) ? 'checked' : '') + ' aria-label="选择"></td>'
     + '<td class="c-thumb">' + thumb + '</td>'
-    + '<td><span class="t-title" title="' + escLocal(p.description) + '">' + escLocal(p.title) + '</span><span class="t-slug">' + escLocal(p.slug) + (p.updatedDate ? ' · 更 ' + escLocal(p.updatedDate) : '') + '</span></td>'
+    + '<td><span class="t-title" data-act="open" title="打开 Markdown 编辑正文&#10;' + escLocal(p.description) + '">' + escLocal(p.title) + '</span><span class="t-slug">' + escLocal(p.slug) + (p.updatedDate ? ' · 更 ' + escLocal(p.updatedDate) : '') + '</span></td>'
     + '<td class="td-date">' + escLocal(p.pubDate) + '</td>'
     + '<td class="td-cat">' + escLocal(p.category) + '</td>'
     + '<td class="td-tags">' + escLocal(tags) + more + '</td>'
     + '<td class="c-status">' + statusBadge(p) + '</td>'
     + '<td class="td-ops">'
-    + '<button class="iop" data-act="open" title="打开编辑">' + icon('edit') + '</button>'
+    + '<button class="iop" data-act="edit" title="编辑信息(标题/分类/封面等元数据)">' + icon('edit') + '</button>'
     + '<button class="iop" data-act="preview" title="预览">' + icon('eye') + '</button>'
     + '<button class="iop" data-act="toggle" title="' + (p.draft ? '发布' : '转为草稿') + '">' + icon(p.draft ? 'up' : 'down') + '</button>'
     + '<button class="iop del" data-act="del" title="删除(回收站)">' + icon('x') + '</button>'
@@ -257,6 +258,7 @@ $('rows').addEventListener('click', (e) => {
     return;
   }
   if (act === 'open') vscode.postMessage({ type: 'open', file });
+  else if (act === 'edit') vscode.postMessage({ type: 'edit', file });
   else if (act === 'preview') vscode.postMessage({ type: 'preview', file });
   else if (act === 'toggle') {
     const p = posts.find((x) => x.file === file);
@@ -378,6 +380,8 @@ export function openPostsCenter(): void {
         renderShell();
       } else if (msg.type === 'open') {
         await openFile(msg.file);
+      } else if (msg.type === 'edit') {
+        openPostEditor(() => sendInit(), msg.file);
       } else if (msg.type === 'preview') {
         await openPostPreview(msg.file);
       } else if (msg.type === 'newPost') {
