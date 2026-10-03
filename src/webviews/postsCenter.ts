@@ -316,6 +316,18 @@ function sendInit(): void {
   void panel.webview.postMessage({ type: 'init', posts, thumbs });
 }
 
+/** 重渲染外壳(换档后徽章要变);webview 加载完会发 ready → sendInit */
+function renderShell(): void {
+  if (!panel || !openedProfile) return;
+  panel.webview.html = pageShell(
+    '文章中心',
+    body(),
+    script(),
+    panel.webview.cspSource,
+    openedProfile.dir.split(/[\\/]/).pop() ?? '',
+  );
+}
+
 /** 外部(文件监听、档案切换)通知文章中心刷新;未打开时无操作 */
 export function refreshPostsCenter(): void {
   if (panel && openedProfile) {
@@ -330,6 +342,16 @@ export function refreshPostsCenter(): void {
 
 export function openPostsCenter(): void {
   if (panel) {
+    // 绑定被切过就静默重载到新档案;没变则保留现场(筛选/选择不丢)
+    try {
+      const now = getProfile();
+      if (openedProfile && now.dir !== openedProfile.dir) {
+        openedProfile = now;
+        renderShell();
+      }
+    } catch {
+      /* 未绑定 */
+    }
     panel.reveal();
     return;
   }
@@ -341,13 +363,7 @@ export function openPostsCenter(): void {
     vscode.ViewColumn.One,
     { enableScripts: true, retainContextWhenHidden: true },
   );
-  panel.webview.html = pageShell(
-    '文章中心',
-    body(),
-    script(),
-    panel.webview.cspSource,
-    profile.dir.split(/[\\/]/).pop() ?? '',
-  );
+  renderShell();
   panel.onDidDispose(() => {
     panel = undefined;
     openedProfile = undefined;
@@ -356,6 +372,10 @@ export function openPostsCenter(): void {
     try {
       if (msg.type === 'ready') {
         sendInit();
+      } else if (msg.type === 'refresh') {
+        if (!panel || !openedProfile) return;
+        openedProfile = getProfile();
+        renderShell();
       } else if (msg.type === 'open') {
         await openFile(msg.file);
       } else if (msg.type === 'preview') {

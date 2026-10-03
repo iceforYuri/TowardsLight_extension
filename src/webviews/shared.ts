@@ -58,9 +58,12 @@ h1 {
 }
 .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 30px; }
 
-/* 档案徽章:右上角标明本表单读写哪个档案(打开时锁定,切换绑定后提交会被拒) */
-.profile-badge {
+/* 档案徽章 + 刷新:右上角标明本表单读写哪个档案(打开时锁定),刷新重新读取当前绑定 */
+.profile-tools {
   position: fixed; top: 14px; right: 16px; z-index: 50;
+  display: flex; align-items: center; gap: 8px;
+}
+.profile-badge {
   font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em;
   color: var(--muted); background: var(--bg);
   border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px;
@@ -70,6 +73,18 @@ h1 {
   content: ''; width: 6px; height: 6px; border-radius: 50%;
   background: var(--accent); flex: none;
 }
+.tool-btn {
+  width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--bg); color: var(--muted); cursor: pointer;
+  display: grid; place-items: center; font-size: 13px; line-height: 1;
+  transition: color 0.15s ease, border-color 0.15s ease, transform 0.3s var(--ease);
+}
+.tool-btn:hover { color: var(--accent); border-color: var(--accent); }
+.tool-btn:active { transform: rotate(-180deg); }
+
+/* 面板入场:统一淡入轻移(reduced-motion 全局规则已兜底) */
+@keyframes page-in { from { opacity: 0; transform: translateY(8px); } }
+body { animation: page-in 0.3s var(--ease); }
 
 /* ---- 卡片分区 ---- */
 .card {
@@ -342,13 +357,14 @@ html { scroll-behavior: smooth; }
 </style>
 </head>
 <body>
-${badge ? `<div class="profile-badge" title="本表单的读取与保存都作用于该档案(打开时锁定);在侧边栏「档案」行切换绑定">档案:${badge}</div>` : ''}
+${badge ? `<div class="profile-tools"><button class="tool-btn" id="__refresh" title="刷新:重新读取当前绑定档案" aria-label="刷新">↻</button><div class="profile-badge" title="本表单的读取与保存都作用于该档案(打开时锁定);在侧边栏「档案」行切换绑定">档案:${badge}</div></div>` : ''}
 <div class="wrap">
 ${body}
 </div>
 <div class="toast" id="toast"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span id="toastText"></span></div>
 <script nonce="${nonce}">
 ${script}
+${badge ? `document.getElementById('__refresh').addEventListener('click', () => vscode.postMessage({ type: 'refresh' }));` : ''}
 </script>
 </body>
 </html>`;

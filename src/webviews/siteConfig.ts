@@ -245,25 +245,61 @@ vscode.postMessage({ type: 'ready' });
   );
 }
 
+let panel: vscode.WebviewPanel | undefined;
+let profile: ReturnType<typeof getProfile> | undefined;
+
+function renderShell(): void {
+  if (!panel || !profile) return;
+  panel.webview.html = pageShell(
+    '站点信息',
+    body(),
+    script(),
+    panel.webview.cspSource,
+    profile.dir.split(/[\\/]/).pop() ?? '',
+  );
+}
+
 export function openSiteConfigForm(): void {
-  const profile = getProfile();
-  const panel = vscode.window.createWebviewPanel(
+  if (panel) {
+    // 绑定被切过就重载到新档案,否则保留现场(未保存的草稿不丢)
+    try {
+      const now = getProfile();
+      if (profile && now.dir !== profile.dir) {
+        profile = now;
+        renderShell();
+      }
+    } catch {
+      /* 未绑定 */
+    }
+    panel.reveal();
+    return;
+  }
+  profile = getProfile();
+  panel = vscode.window.createWebviewPanel(
     'towardsLightSiteConfig',
     '站点信息',
     vscode.ViewColumn.One,
     { enableScripts: true, retainContextWhenHidden: true },
   );
-  const badge = profile.dir.split(/[\\/]/).pop() ?? '';
-  panel.webview.html = pageShell('站点信息', body(), script(), panel.webview.cspSource, badge);
+  renderShell();
+  panel.onDidDispose(() => {
+    panel = undefined;
+    profile = undefined;
+  });
   panel.webview.onDidReceiveMessage(async (msg) => {
+    if (!panel || !profile) return;
+    const p = panel;
     try {
       if (msg.type === 'ready') {
-        panel.webview.postMessage({ type: 'init', values: readSiteConfig(profile.siteFile) });
+        p.webview.postMessage({ type: 'init', values: readSiteConfig(profile.siteFile) });
+      } else if (msg.type === 'refresh') {
+        profile = getProfile();
+        renderShell();
       } else if (msg.type === 'resolveImage') {
-        panel.webview.postMessage({
+        p.webview.postMessage({
           type: 'imageUri',
           field: msg.field,
-          uri: resolveImageUri(panel.webview, profile, msg.value),
+          uri: resolveImageUri(p.webview, profile, msg.value),
         });
       } else if (msg.type === 'pickImage') {
         if (!profile.imagesDir) throw new Error('当前档案没有 images/ 目录');
@@ -271,19 +307,19 @@ export function openSiteConfigForm(): void {
         if (!picked?.length) return;
         const name = copyImageIn(picked[0], profile.imagesDir);
         const ref = siteImageRef(name);
-        panel.webview.postMessage({
+        p.webview.postMessage({
           type: 'imagePicked',
           field: msg.field,
           ref,
-          uri: resolveImageUri(panel.webview, profile, ref),
+          uri: resolveImageUri(p.webview, profile, ref),
         });
       } else if (msg.type === 'submit') {
         assertProfileUnchanged(profile);
         const changed = updateSiteConfig(profile.siteFile, msg.values);
-        panel.webview.postMessage({ type: 'saved', changed });
+        p.webview.postMessage({ type: 'saved', changed });
       }
     } catch (e) {
-      panel.webview.postMessage({ type: 'error', message: (e as Error).message });
+      p.webview.postMessage({ type: 'error', message: (e as Error).message });
     }
   });
 }

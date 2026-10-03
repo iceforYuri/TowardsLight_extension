@@ -402,46 +402,89 @@ vscode.postMessage({ type: 'ready' });
   );
 }
 
+let panel: vscode.WebviewPanel | undefined;
+let profile: ReturnType<typeof getProfile> | undefined;
+
+function renderShell(): void {
+  if (!panel || !profile) return;
+  panel.webview.html = pageShell(
+    '链接管理',
+    body(),
+    script(),
+    panel.webview.cspSource,
+    profile.dir.split(/[\\/]/).pop() ?? '',
+  );
+}
+
+function sendInit(): void {
+  if (!panel || !profile) return;
+  void panel.webview.postMessage({
+    type: 'init',
+    icons: readIcons(profile.iconFile),
+    groups: readLinkGroups(profile.linksFile),
+    links: readLinks(profile.linksFile),
+  });
+}
+
+/** 落盘失败:报错 + 重新下发真实数据,纠正前端的乐观更新 */
+function fail(e: unknown): void {
+  if (!panel) return;
+  void panel.webview.postMessage({ type: 'error', message: (e as Error).message });
+  sendInit();
+}
+
 export function openLinkForm(): void {
-  const profile = getProfile();
-  const panel = vscode.window.createWebviewPanel(
+  if (panel) {
+    try {
+      const now = getProfile();
+      if (profile && now.dir !== profile.dir) {
+        profile = now;
+        renderShell();
+      }
+    } catch {
+      /* 未绑定 */
+    }
+    panel.reveal();
+    return;
+  }
+  profile = getProfile();
+  panel = vscode.window.createWebviewPanel(
     'towardsLightLink',
     '链接管理',
     vscode.ViewColumn.One,
     { enableScripts: true, retainContextWhenHidden: true },
   );
-  panel.webview.html = pageShell('链接管理', body(), script(), panel.webview.cspSource, profile.dir.split(/[\\/]/).pop() ?? '');
-
-  const sendInit = () =>
-    panel.webview.postMessage({
-      type: 'init',
-      icons: readIcons(profile.iconFile),
-      groups: readLinkGroups(profile.linksFile),
-      links: readLinks(profile.linksFile),
-    });
-  /** 落盘失败:报错 + 重新下发真实数据,纠正前端的乐观更新 */
-  const fail = (e: unknown) => {
-    panel.webview.postMessage({ type: 'error', message: (e as Error).message });
-    void sendInit();
-  };
+  renderShell();
+  panel.onDidDispose(() => {
+    panel = undefined;
+    profile = undefined;
+  });
 
   panel.webview.onDidReceiveMessage((msg) => {
+    if (!panel || !profile) return;
+    const p = panel;
+    const prof = profile;
     try {
       if (msg.type === 'ready') {
-        void sendInit();
+        sendInit();
+        return;
+      }
+      if (msg.type === 'refresh') {
+        profile = getProfile();
+        renderShell();
         return;
       }
       // 之后全是写操作:提交前统一校验档案绑定未被切换
-      assertProfileUnchanged(profile);
+      assertProfileUnchanged(prof);
       if (msg.type === 'move') {
-        for (let s = 0; s < (msg.steps ?? 1); s++) moveLink(profile.linksFile, msg.key, msg.dir);
-        panel.webview.postMessage({ type: 'saved', text: '顺序已更新' });
+        for (let s = 0; s < (msg.steps ?? 1); s++) moveLink(prof.linksFile, msg.key, msg.dir);
+        p.webview.postMessage({ type: 'saved', text: '顺序已更新' });
       } else if (msg.type === 'reorderGroups') {
-        reorderGroups(profile.linksFile, msg.ids);
-        panel.webview.postMessage({ type: 'saved', text: '分组顺序已更新' });
+        reorderGroups(prof.linksFile, msg.ids);
+        p.webview.postMessage({ type: 'saved', text: '分组顺序已更新' });
       } else if (msg.type === 'delete') {
-        deleteLink(profile.linksFile, msg.key);
-        panel.webview.postMessage({ type: 'saved', text: '链接已删除' });
+        deleteLink(prof.linksFile, msg.key);
+        p.webview.postMessage({ type: 'saved', text: '链接已删除' });
       } else if (msg.type === 'deleteGroup') {
         const links = readLinks(profile.linksFile).filter((l) => l.group === msg.id);
         if (links.length) throw new Error(`分组里还有 ${links.length} 条链接,不能删除`);

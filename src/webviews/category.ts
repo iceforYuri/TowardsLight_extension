@@ -181,42 +181,81 @@ vscode.postMessage({ type: 'ready' });
   );
 }
 
+let panel: vscode.WebviewPanel | undefined;
+let profile: ReturnType<typeof getProfile> | undefined;
+
+function renderShell(): void {
+  if (!panel || !profile) return;
+  panel.webview.html = pageShell(
+    '管理分类',
+    body(),
+    script(),
+    panel.webview.cspSource,
+    profile.dir.split(/[\\/]/).pop() ?? '',
+  );
+}
+
+function sendInit(): void {
+  if (!panel || !profile) return;
+  const refCounts: Record<string, number> = {};
+  for (const p of listPosts(profile.postsDir)) {
+    if (p.category) refCounts[p.category] = (refCounts[p.category] ?? 0) + 1;
+  }
+  void panel.webview.postMessage({
+    type: 'init',
+    icons: readIcons(profile.iconFile),
+    categories: readCategories(profile.siteFile),
+    refCounts,
+  });
+}
+
 export function openCategoryForm(): void {
-  const profile = getProfile();
-  const panel = vscode.window.createWebviewPanel(
+  if (panel) {
+    try {
+      const now = getProfile();
+      if (profile && now.dir !== profile.dir) {
+        profile = now;
+        renderShell();
+      }
+    } catch {
+      /* 未绑定 */
+    }
+    panel.reveal();
+    return;
+  }
+  profile = getProfile();
+  panel = vscode.window.createWebviewPanel(
     'towardsLightCategory',
     '管理分类',
     vscode.ViewColumn.One,
     { enableScripts: true, retainContextWhenHidden: true },
   );
-  panel.webview.html = pageShell('管理分类', body(), script(), panel.webview.cspSource, profile.dir.split(/[\\/]/).pop() ?? '');
-  const sendInit = () => {
-    const refCounts: Record<string, number> = {};
-    for (const p of listPosts(profile.postsDir)) {
-      if (p.category) refCounts[p.category] = (refCounts[p.category] ?? 0) + 1;
-    }
-    return panel.webview.postMessage({
-      type: 'init',
-      icons: readIcons(profile.iconFile),
-      categories: readCategories(profile.siteFile),
-      refCounts,
-    });
-  };
+  renderShell();
+  panel.onDidDispose(() => {
+    panel = undefined;
+    profile = undefined;
+  });
   panel.webview.onDidReceiveMessage((msg) => {
+    if (!panel || !profile) return;
+    const p = panel;
+    const prof = profile;
     try {
       if (msg.type === 'ready') {
-        void sendInit();
+        sendInit();
+      } else if (msg.type === 'refresh') {
+        profile = getProfile();
+        renderShell();
       } else if (msg.type === 'submit') {
-        assertProfileUnchanged(profile);
+        assertProfileUnchanged(prof);
         const v = msg.value;
         const countRefs = (name: string) =>
-          listPosts(profile.postsDir).filter((p) => p.category === name).length;
+          listPosts(prof.postsDir).filter((x) => x.category === name).length;
         if (msg.mode === 'delete') {
           const refs = countRefs(v.name);
           if (refs > 0) throw new Error(`「${v.name}」还有 ${refs} 篇文章引用,不能删除`);
-          deleteCategory(profile.siteFile, v.name);
-          void sendInit();
-          panel.webview.postMessage({ type: 'saved', mode: 'delete' });
+          deleteCategory(prof.siteFile, v.name);
+          sendInit();
+          p.webview.postMessage({ type: 'saved', mode: 'delete' });
           return;
         }
         if (!v.name) throw new Error('分类名不能为空');
@@ -226,21 +265,21 @@ export function openCategoryForm(): void {
           if (v.renameTo && v.renameTo !== v.name) {
             const refs = countRefs(v.name);
             if (refs > 0) throw new Error(`「${v.name}」还有 ${refs} 篇文章引用,不能改名`);
-            renameCategory(profile.siteFile, v.name, v.renameTo);
+            renameCategory(prof.siteFile, v.name, v.renameTo);
           }
-          updateCategory(profile.siteFile, v.renameTo || v.name, {
+          updateCategory(prof.siteFile, v.renameTo || v.name, {
             icon: v.icon,
             tone: v.tone,
             description: v.description,
           });
         } else {
-          addCategory(profile.siteFile, v);
+          addCategory(prof.siteFile, v);
         }
-        void sendInit();
-        panel.webview.postMessage({ type: 'saved', mode: msg.mode });
+        sendInit();
+        p.webview.postMessage({ type: 'saved', mode: msg.mode });
       }
     } catch (e) {
-      panel.webview.postMessage({ type: 'error', message: (e as Error).message });
+      p.webview.postMessage({ type: 'error', message: (e as Error).message });
     }
   });
 }

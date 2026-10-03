@@ -140,22 +140,63 @@ vscode.postMessage({ type: 'ready' });
   );
 }
 
+let panel: vscode.WebviewPanel | undefined;
+let profile: ProfileInfo | undefined;
+let onCreated: (() => void) | undefined;
+
+function renderShell(): void {
+  if (!panel || !profile) return;
+  panel.webview.html = pageShell(
+    '新建文章',
+    body(),
+    script(),
+    panel.webview.cspSource,
+    profile.dir.split(/[\\/]/).pop() ?? '',
+  );
+}
+
 export function openNewPostForm(refreshPosts: () => void): void {
-  const profile: ProfileInfo = getProfile();
-  const panel = vscode.window.createWebviewPanel(
+  onCreated = refreshPosts;
+  if (panel) {
+    try {
+      const now = getProfile();
+      if (profile && now.dir !== profile.dir) {
+        profile = now;
+        renderShell();
+      }
+    } catch {
+      /* 未绑定 */
+    }
+    panel.reveal();
+    return;
+  }
+  profile = getProfile();
+  panel = vscode.window.createWebviewPanel(
     'towardsLightNewPost',
     '新建文章',
     vscode.ViewColumn.One,
     { enableScripts: true, retainContextWhenHidden: true },
   );
-  panel.webview.html = pageShell('新建文章', body(), script(), panel.webview.cspSource, profile.dir.split(/[\\/]/).pop() ?? '');
+  renderShell();
+  panel.onDidDispose(() => {
+    panel = undefined;
+    profile = undefined;
+  });
 
   panel.webview.onDidReceiveMessage(async (msg) => {
+    if (!panel || !profile) return;
+    const p = panel;
+    const prof = profile;
+    if (msg.type === 'refresh') {
+      profile = getProfile();
+      renderShell();
+      return;
+    }
     if (msg.type === 'ready') {
-      const fromMeta = readCategories(profile.siteFile).map((c) => c.name);
-      const fromPosts = listPosts(profile.postsDir).map((p) => p.category);
+      const fromMeta = readCategories(prof.siteFile).map((c) => c.name);
+      const fromPosts = listPosts(prof.postsDir).map((x) => x.category);
       const categories = [...new Set([...fromMeta, ...fromPosts])].filter(Boolean);
-      panel.webview.postMessage({ type: 'init', categories, covers: listImages(profile.imagesDir) });
+      p.webview.postMessage({ type: 'init', categories, covers: listImages(prof.imagesDir) });
       return;
     }
     if (msg.type === 'resolveImage') {
@@ -201,7 +242,7 @@ export function openNewPostForm(refreshPosts: () => void): void {
       const file = path.join(profile.postsDir, `${v.slug}.md`);
       if (fs.existsSync(file)) throw new Error(`已存在同名文章:${v.slug}.md`);
       fs.writeFileSync(file, buildPostContent(v), 'utf8');
-      refreshPosts();
+      onCreated?.();
       panel.dispose();
       const doc = await vscode.workspace.openTextDocument(file);
       await vscode.window.showTextDocument(doc);
