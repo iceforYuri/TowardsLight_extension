@@ -14,6 +14,8 @@ export interface ServerRec {
   startedAt: number;
   /** 最近若干行输出(环缓冲),启动失败时拼进错误信息 */
   tail: string[];
+  /** stdout 里 astro 报出了实际监听端口(防端口顺延时的误 ping) */
+  bound: boolean;
 }
 
 const servers: ServerRec[] = [];
@@ -64,7 +66,8 @@ function portFree(port: number): Promise<boolean> {
     const srv = net.createServer();
     srv.once('error', () => resolve(false));
     srv.once('listening', () => srv.close(() => resolve(true)));
-    srv.listen(port);
+    // 与 astro 的绑定目标一致(localhost),避免「双栈探测通过、loopback 实际被占」
+    srv.listen(port, 'localhost');
   });
 }
 
@@ -93,7 +96,10 @@ function attachOutput(rec: ServerRec): void {
       if (bound && bound !== rec.port) {
         previewLog().appendLine(`[${rec.port}] astro 实际监听在 ${bound},已跟随`);
         rec.port = bound;
+        persistServers();
+        emitter.fire();
       }
+      if (bound) rec.bound = true;
     }
   };
   rec.proc.stdout?.on('data', (c: Buffer) => push('out', c));
@@ -224,6 +230,7 @@ export async function startPreview(): Promise<ServerRec> {
     profileDir: profile.dir,
     startedAt: Date.now(),
     tail: [],
+    bound: false,
   };
   attachOutput(rec);
 
@@ -257,7 +264,8 @@ export async function startPreview(): Promise<ServerRec> {
   while (Date.now() < deadline) {
     if (status.spawnError) fail(`无法启动 npm:${status.spawnError.message}`);
     if (status.exitCode !== null) fail(`dev server 启动后即退出(code=${status.exitCode})`);
-    if (await ping(rec.port)) {
+    // 就绪 = astro 自报端口(防顺延时的误 ping)+ 该端口确有 HTTP 响应
+    if (rec.bound && (await ping(rec.port))) {
       servers.push(rec);
       persistServers();
       emitter.fire();
