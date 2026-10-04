@@ -2,12 +2,12 @@
   "name": "towards-light-editor",
   "displayName": "TowardsLight 博客工具",
   "description": "TowardsLight 博客的文章管理、写作预览与站点配置工具(本地扩展)",
-  "version": "0.11.2",
+  "version": "0.12.0",
   "private": true,
   "publisher": "towardslight",
   "license": "MIT",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.90.0"
   },
   "categories": [
     "Other"
@@ -121,6 +121,11 @@
         "command": "towardsLight.openPostsCenter",
         "title": "文章中心",
         "icon": "$(edit)"
+      },
+      {
+        "command": "towardsLight.aiSettings",
+        "title": "AI 摘要设置",
+        "icon": "$(sparkle)"
       }
     ],
     "menus": {
@@ -140,7 +145,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.3",
-    "@types/vscode": "1.85.0",
+    "@types/vscode": "^1.90.0",
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
     "typescript": "^7.0.2"

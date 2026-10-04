@@ -29,6 +29,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         links: 'towardsLight.addLink',
         site: 'towardsLight.editSiteConfig',
         newPost: 'towardsLight.newPost',
+        aiSettings: 'towardsLight.aiSettings',
       }[msg.type as string];
       if (cmd) void vscode.commands.executeCommand(cmd);
       else if (msg.type === 'stopServer') {
@@ -158,6 +159,11 @@ body { margin: 0; padding: 10px 10px 24px; color: var(--fg); background: var(--b
 
 <div class="sec">
   <button class="play" data-m="newPost">＋ 新建文章</button>
+</div>
+
+<div class="sec">
+  <p class="sec-t">设置</p>
+  <div class="row" data-m="aiSettings"><span class="k">✦</span><span class="v">AI 摘要</span><span class="arr">→</span></div>
 </div>
 
 <script nonce="${nonce}">

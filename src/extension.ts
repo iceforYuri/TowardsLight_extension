@@ -3,6 +3,8 @@ import path from 'node:path';
 import * as vscode from 'vscode';
 import { addIcon, lucideIconBody } from './core';
 import { articleImageDir, articleImageRef, copyImageIn } from './core/images';
+import { initAi } from './ai';
+import { openAiSettingsForm } from './webviews/aiSettings';
 import { disposePreviewLog, disposeServer, listServers, openPostPreview, openSitePreview, previewLog, reapOrphanServers, startJunctionWatch, startPreview, stopJunctionWatch, stopServer } from './preview';
 import { SidebarProvider } from './sidebar';
 import { ensureJunctions, getProfile, getTemplateDir, guard, initUtil, openFile, pickImages, setTemplateDir, workspaceRoot } from './util';
@@ -224,6 +226,7 @@ async function startPreviewCommand(): Promise<void> {
 
 export function activate(context: vscode.ExtensionContext): void {
   initUtil(context);
+  initAi(context);
   // 上次会话拉起的 dev server 可能已成孤儿,按 PID 账本回收
   reapOrphanServers();
   // 恢复上次选择的档案
@@ -291,6 +294,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('towardsLight.addCategory', guard(() => openCategoryForm())),
     vscode.commands.registerCommand('towardsLight.addLink', guard(() => openLinkForm())),
     vscode.commands.registerCommand('towardsLight.addIcon', guard(() => addIconCommand(context))),
+    vscode.commands.registerCommand('towardsLight.aiSettings', guard(() => openAiSettingsForm())),
     vscode.commands.registerCommand('towardsLight.insertImage', guard(() => insertImageCommand())),
     vscode.commands.registerCommand('towardsLight.openSiteFile', guard(() => openFile(getProfile().siteFile))),
     vscode.commands.registerCommand('towardsLight.openLinksFile', guard(() => openFile(getProfile().linksFile))),

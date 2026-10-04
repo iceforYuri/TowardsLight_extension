@@ -35,7 +35,11 @@ function body(edit: boolean): string {
   </div>
 </div>
 
-<label class="f">描述 <span class="req">*</span></label>
+<label class="f">描述 <span class="req">*</span>${
+  edit
+    ? ' <button type="button" id="genDesc" style="float:right;font-size:11px;padding:2px 10px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);cursor:pointer">✨ AI 生成</button>'
+    : ''
+}</label>
 <textarea id="description" placeholder="一句话摘要,出现在列表、文章头部和 RSS 里"></textarea>
 
 <label class="f">标签</label>
@@ -106,6 +110,20 @@ if (!EDIT) {
 }
 window.addEventListener('message', (e) => {
   const msg = e.data;
+  if (msg.type === 'desc') {
+    const b = $('genDesc');
+    if (b) { b.disabled = false; b.textContent = '✨ AI 生成'; }
+    $('description').value = msg.text;
+    $('description').dispatchEvent(new Event('input', { bubbles: true }));
+    toast(msg.via === 'local' ? '已生成(本地提取,模型不可用)' : '已生成摘要草稿,请过目');
+    return;
+  }
+  if (msg.type === 'descError') {
+    const b = $('genDesc');
+    if (b) { b.disabled = false; b.textContent = '✨ AI 生成'; }
+    showError(msg.message);
+    return;
+  }
   if (msg.type === 'init') {
     const dl = $('categoryList');
     for (const c of msg.categories) {
@@ -170,6 +188,15 @@ $('cover').addEventListener('change', (e) => {
     vscode.postMessage({ type: 'pickCover', slug: $('slug').value.trim() });
   }
 });
+const genBtn = $('genDesc');
+if (genBtn) {
+  genBtn.addEventListener('click', () => {
+    showError('');
+    genBtn.disabled = true;
+    genBtn.textContent = '生成中…';
+    vscode.postMessage({ type: 'genDesc' });
+  });
+}
 $('submit').addEventListener('click', () => {
   showError('');
   $('submit').disabled = true;
@@ -289,6 +316,18 @@ export function openPostEditor(refreshPosts: () => void, file?: string): void {
       return;
     }
     if (msg.type !== 'submit') {
+      if (msg.type === 'genDesc') {
+        try {
+          if (!editFile) throw new Error('新建文章请先写正文,保存后再生成摘要');
+          const { generateSummary } = await import('../ai');
+          const markdown = fs.readFileSync(editFile, 'utf8');
+          const r = await generateSummary(markdown);
+          p.webview.postMessage({ type: 'desc', text: r.text, via: r.via });
+        } catch (e) {
+          p.webview.postMessage({ type: 'descError', message: (e as Error).message });
+        }
+        return;
+      }
       if (msg.type === 'pickCover') {
         try {
           assertProfileUnchanged(prof);

@@ -366,3 +366,24 @@ fs.rmSync(imgTmp, { recursive: true, force: true });
 fs.rmSync(tmp, { recursive: true, force: true });
 fs.rmSync(fakeRoot, { recursive: true, force: true });
 console.log(`\n全部通过:${passed} 项`);
+
+// ── AI 摘要纯函数 ──
+const mdAi = `---
+title: 测试
+---
+# 标题
+![img](image/x/y.png)
+\`\`\`js
+const x = 1;
+\`\`\`
+这是第一段正文,讲清楚了一件事。这是第二句。
+第二段[链接](https://a.b)文字。`;
+assert.ok(core.prepareSource(mdAi).includes('这是第一段正文'), '正文应保留');
+assert.ok(!core.prepareSource(mdAi).includes('const x'), '代码块应剔除');
+assert.ok(!core.prepareSource(mdAi).includes('title:'), 'frontmatter 应剔除');
+assert.ok(core.prepareSource(mdAi).includes('链接'), '链接保留文字');
+assert.equal(core.normalizeSummary('摘要:「这是一次测试。」\n第二行'), '这是一次测试。', '归一化去前缀引号换行');
+assert.equal(core.normalizeSummary('短'), '短');
+assert.ok(core.localFallback(mdAi).startsWith('这是第一段正文'), '本地回退取首段');
+assert.ok(core.buildPrompt('正文').includes('正文'), '提示词含正文');
+ok('AI 摘要:正文清洗/归一化/本地回退/提示词');
