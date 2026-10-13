@@ -31,6 +31,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     view.webview.html = createSidebarHtml();
     view.webview.onDidReceiveMessage(async (msg) => {
       try {
+        if (msg.type === 'ready') {
+          // webview 重建(侧栏隐藏再显示)后主动握手,补发状态
+          this.refresh();
+          return;
+        }
         const cmd = {
           switchProfile: 'towardsLight.switchProfile',
           selectTemplate: 'towardsLight.selectTemplateDir',
@@ -268,6 +273,9 @@ body.mode-post #consoleView { display: none; }
 <body>
 
 <div id="consoleView">
+  <div class="row" id="activePostRow" style="display:none;border:1px solid var(--line);margin-bottom:2px">
+    <span class="k">正在读</span><span class="v" id="activePostName"></span><span class="arr">→</span>
+  </div>
   <div class="sec">
     <p class="sec-t">绑定</p>
     <div class="row" data-m="switchProfile"><span class="k">档案</span><span class="v" id="profileName">…</span><span class="tag" id="profileKind"></span><span class="arr">→</span></div>
@@ -304,7 +312,7 @@ body.mode-post #consoleView { display: none; }
 
 <div id="postView">
   <div class="sec" style="margin-top:0">
-    <p class="sec-t">当前文章</p>
+    <p class="sec-t">当前文章 <button type="button" class="ai-btn" id="backConsole" style="margin-left:auto">← 控制台</button></p>
     <div class="p-head"><span class="p-slug" id="pSlug"></span></div>
   </div>
   <label class="f">标题</label>
@@ -340,6 +348,18 @@ body.mode-post #consoleView { display: none; }
 const vscode = acquireVsCodeApi();
 const $ = (id) => document.getElementById(id);
 let currentPost = null;
+let lastPostFile = null;
+let pinConsole = false;
+
+function applyMode(post) {
+  // 「返回控制台」钉住控制台,直到切到另一篇文章
+  document.body.classList.toggle('mode-post', !!post && !pinConsole);
+  $('activePostRow').style.display = post && pinConsole ? '' : 'none';
+  if (post && pinConsole) $('activePostName').textContent = post.title || post.slug;
+}
+
+$('backConsole').addEventListener('click', () => { pinConsole = true; applyMode(currentPost); });
+$('activePostRow').addEventListener('click', () => { pinConsole = false; applyMode(currentPost); });
 
 document.querySelectorAll('[data-m]').forEach((el) =>
   el.addEventListener('click', () => vscode.postMessage({ type: el.dataset.m })),
@@ -428,10 +448,14 @@ window.addEventListener('message', (e) => {
       el.addEventListener('click', () => vscode.postMessage({ type: 'openFile', file: el.dataset.file })));
     // 分类补全
     $('p_categoryList').innerHTML = (m.categories || []).map((c) => '<option value="' + String(c).replace(/"/g, '&quot;') + '">').join('');
-    // 模式切换:有激活文章时填属性面板
-    document.body.classList.toggle('mode-post', !!m.post);
+    // 模式切换:有激活文章时填属性面板;换文章解除控制台钉住
+    if ((m.post ? m.post.file : null) !== lastPostFile) {
+      lastPostFile = m.post ? m.post.file : null;
+      pinConsole = false;
+    }
     if (m.post) fillPost(m.post);
     else currentPost = null;
+    applyMode(m.post);
   } else if (m.type === 'aiResult') {
     $('p_desc').value = m.text;
     $('aiHint').textContent = '已生成(' + (m.via || '') + '),检查后保存';
@@ -452,6 +476,7 @@ window.addEventListener('message', (e) => {
     $('aiHint').textContent = m.message || '';
   }
 });
+vscode.postMessage({ type: 'ready' });
 </script>
 </body>
 </html>`;

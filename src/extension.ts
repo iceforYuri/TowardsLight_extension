@@ -277,7 +277,9 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider('towardsLightHome', sidebar),
+    vscode.window.registerWebviewViewProvider('towardsLightHome', sidebar, {
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
     sidebar.listenServers(),
     vscode.commands.registerCommand('towardsLight.refreshPosts', () => refreshAll()),
     vscode.commands.registerCommand('towardsLight.switchProfile', guard(() => switchProfileCommand(context, refreshAll))),
