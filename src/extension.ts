@@ -270,9 +270,10 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   }
   watchPosts();
-  // 侧栏属性面板跟随活动编辑器;保存文章后状态刷新
+  // 侧栏属性面板跟随活动编辑器/标签页;保存文章后状态刷新
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor(() => sidebar.refresh()),
+    vscode.window.tabGroups.onDidChangeTabGroups(() => sidebar.refresh()),
     vscode.workspace.onDidSaveTextDocument(() => sidebar.refresh()),
   );
 

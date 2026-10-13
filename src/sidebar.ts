@@ -99,8 +99,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           mtime: new Date(m).toISOString().slice(0, 10),
         }));
       categories = [...new Set(posts.map((x) => x.category).filter(Boolean))].sort();
-      // 属性面板:活动编辑器里的档案内 md
-      const file = vscode.window.activeTextEditor?.document.fileName;
+      // 属性面板:活动编辑器里的档案内 md。文本编辑器优先;自定义编辑器/预览
+      // 标签页(别的插件打开的 md)从 activeTab 的 uri 兜底识别
+      let file = vscode.window.activeTextEditor?.document.fileName;
+      if (!file?.endsWith('.md')) {
+        const input = vscode.window.tabGroups.activeTabGroup?.activeTab?.input;
+        const uri =
+          input && typeof input === 'object' && 'uri' in input
+            ? (input as { uri: vscode.Uri }).uri
+            : undefined;
+        if (uri?.scheme === 'file' && uri.fsPath.endsWith('.md')) file = uri.fsPath;
+      }
       if (file && file.endsWith('.md')) {
         const rel = path.relative(p.postsDir, file);
         if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
