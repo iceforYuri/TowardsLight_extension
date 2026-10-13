@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { addIcon, initProfile, lucideIconBody } from './core';
 import { articleImageDir, articleImageRef, copyImageIn } from './core/images';
 import { initAi } from './ai';
-import { openAiSettingsForm } from './webviews/aiSettings';
+import { openSettings } from './webviews/settings';
 import { disposePreviewLog, disposeServer, listServers, openPostPreview, openSitePreview, previewLog, reapOrphanServers, startJunctionWatch, startPreview, stopJunctionWatch, stopServer } from './preview';
 import { SidebarProvider } from './sidebar';
 import { ensureJunctions, getProfile, getTemplateDir, guard, initUtil, openFile, pickImages, setTemplateDir, workspaceRoot } from './util';
@@ -254,7 +254,6 @@ export function activate(context: vscode.ExtensionContext): void {
     refreshPostsCenter();
     watchPosts();
   };
-
   let watcher: vscode.FileSystemWatcher | undefined;
   function watchPosts(): void {
     watcher?.dispose();
@@ -271,6 +270,11 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   }
   watchPosts();
+  // 侧栏属性面板跟随活动编辑器;保存文章后状态刷新
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(() => sidebar.refresh()),
+    vscode.workspace.onDidSaveTextDocument(() => sidebar.refresh()),
+  );
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('towardsLightHome', sidebar),
@@ -299,7 +303,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('towardsLight.addCategory', guard(() => openCategoryForm())),
     vscode.commands.registerCommand('towardsLight.addLink', guard(() => openLinkForm())),
     vscode.commands.registerCommand('towardsLight.addIcon', guard(() => addIconCommand(context))),
-    vscode.commands.registerCommand('towardsLight.aiSettings', guard(() => openAiSettingsForm())),
+    vscode.commands.registerCommand('towardsLight.aiSettings', guard(() => openSettings())),
+    vscode.commands.registerCommand('towardsLight.openSettings', guard(() => openSettings())),
     vscode.commands.registerCommand('towardsLight.insertImage', guard(() => insertImageCommand())),
     vscode.commands.registerCommand('towardsLight.openSiteFile', guard(() => openFile(getProfile().siteFile))),
     vscode.commands.registerCommand('towardsLight.openLinksFile', guard(() => openFile(getProfile().linksFile))),

@@ -2,7 +2,7 @@
   "name": "towards-light-editor",
   "displayName": "TowardsLight 博客工具",
   "description": "TowardsLight 博客的文章管理、写作预览与站点配置工具(本地扩展)",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "private": true,
   "publisher": "towardslight",
   "license": "MIT",
@@ -126,9 +126,21 @@
         "command": "towardsLight.aiSettings",
         "title": "AI 摘要设置",
         "icon": "$(sparkle)"
+      },
+      {
+        "command": "towardsLight.openSettings",
+        "title": "设置",
+        "icon": "$(gear)"
       }
     ],
     "menus": {
+      "view/title": [
+        {
+          "command": "towardsLight.openSettings",
+          "when": "view == towardsLightHome",
+          "group": "navigation@1"
+        }
+      ],
       "editor/context": [
         {
           "command": "towardsLight.insertImage",

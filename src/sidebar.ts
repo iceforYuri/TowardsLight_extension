@@ -1,41 +1,69 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 import * as vscode from 'vscode';
+import { listPosts, parsePost, PostMeta, updatePostMeta } from './core';
+import { articleImageDir, articleImageRef, copyImageIn } from './core/images';
+import { generateSummary } from './ai';
 import { listServers, onDidChangeServers } from './preview';
-import { getProfile, getTemplateDir } from './util';
+import { getProfile, pickImages, getTemplateDir } from './util';
+import { openPostEditor } from './webviews/newPost';
+
+interface RecentPost {
+  file: string;
+  title: string;
+  draft: boolean;
+  valid: boolean;
+}
 
 /**
- * 侧边栏控制台:自绘 WebviewView,取代原生 TreeView。
- * 承载:当前档案/模板、预览控制(启动/停止/日志)、管理入口、新建文章。
- * 数据变化(server 启停、档案切换、文章增删)由 refresh() 重发状态。
+ * 侧边栏双模式:无文章激活时是控制台(绑定/预览/管理/最近文章);
+ * 编辑器里打开档案内文章时切换为该文章的属性面板(全字段快速修改 + AI 摘要)。
  */
 export class SidebarProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
-
-  constructor(private readonly onStateChanged?: () => void) {}
+  /** 当前属性面板绑定的文章(用于保存/AI/选图) */
+  private activeFile: string | undefined;
 
   resolveWebviewView(view: vscode.WebviewView): void {
     this.view = view;
     view.webview.options = { enableScripts: true };
     view.webview.html = createSidebarHtml();
-    view.webview.onDidReceiveMessage((msg) => {
-      const cmd = {
-        switchProfile: 'towardsLight.switchProfile',
-        selectTemplate: 'towardsLight.selectTemplateDir',
-        startPreview: 'towardsLight.startPreview',
-        showLog: 'towardsLight.showServerLog',
-        openCenter: 'towardsLight.openPostsCenter',
-        categories: 'towardsLight.addCategory',
-        links: 'towardsLight.addLink',
-        site: 'towardsLight.editSiteConfig',
-        newPost: 'towardsLight.newPost',
-        aiSettings: 'towardsLight.aiSettings',
-      }[msg.type as string];
-      if (cmd) void vscode.commands.executeCommand(cmd);
-      else if (msg.type === 'stopServer') {
-        void vscode.commands.executeCommand('towardsLight.stopServerAt', msg.port);
-      } else if (msg.type === 'openUrl') {
-        void vscode.env.openExternal(vscode.Uri.parse(msg.url));
+    view.webview.onDidReceiveMessage(async (msg) => {
+      try {
+        const cmd = {
+          switchProfile: 'towardsLight.switchProfile',
+          selectTemplate: 'towardsLight.selectTemplateDir',
+          startPreview: 'towardsLight.startPreview',
+          showLog: 'towardsLight.showServerLog',
+          openCenter: 'towardsLight.openPostsCenter',
+          categories: 'towardsLight.addCategory',
+          links: 'towardsLight.addLink',
+          site: 'towardsLight.editSiteConfig',
+          newPost: 'towardsLight.newPost',
+          openSettings: 'towardsLight.openSettings',
+        }[msg.type as string];
+        if (cmd) {
+          await vscode.commands.executeCommand(cmd);
+        } else if (msg.type === 'stopServer') {
+          await vscode.commands.executeCommand('towardsLight.stopServerAt', msg.port);
+        } else if (msg.type === 'openUrl') {
+          await vscode.env.openExternal(vscode.Uri.parse(msg.url));
+        } else if (msg.type === 'openFile') {
+          const doc = await vscode.workspace.openTextDocument(msg.file);
+          await vscode.window.showTextDocument(doc);
+        } else if (msg.type === 'openFull' && this.activeFile) {
+          const file = this.activeFile;
+          openPostEditor(() => this.refresh(), file);
+        } else if (msg.type === 'aiSummary' && this.activeFile) {
+          await this.handleAiSummary();
+        } else if (msg.type === 'pickCover' && this.activeFile) {
+          await this.handlePickCover(msg.slug);
+        } else if (msg.type === 'savePost' && this.activeFile) {
+          this.handleSave(msg.values);
+        }
+      } catch (e) {
+        void this.view?.webview.postMessage({ type: 'error', message: (e as Error).message });
       }
     });
     this.refresh();
@@ -45,12 +73,32 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     if (!this.view) return;
     let profile: { name: string; kind: string } | null = null;
     let template: string | null = null;
+    let recent: RecentPost[] = [];
+    let post: PostMeta | null = null;
+    let categories: string[] = [];
     try {
       const p = getProfile();
       profile = { name: path.basename(p.dir), kind: p.kind };
+      const posts = listPosts(p.postsDir);
+      recent = posts
+        .map((x) => ({ x, m: fs.statSync(x.file).mtimeMs }))
+        .sort((a, b) => b.m - a.m)
+        .slice(0, 5)
+        .map(({ x }) => ({ file: x.file, title: x.title, draft: x.draft, valid: x.valid }));
+      categories = [...new Set(posts.map((x) => x.category).filter(Boolean))].sort();
+      // 属性面板:活动编辑器里的档案内 md
+      const file = vscode.window.activeTextEditor?.document.fileName;
+      if (file && file.endsWith('.md')) {
+        const rel = path.relative(p.postsDir, file);
+        if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
+          this.activeFile = file;
+          post = parsePost(file);
+        }
+      }
     } catch {
       /* 未绑定 */
     }
+    if (!post) this.activeFile = undefined;
     try {
       template = path.basename(getTemplateDir());
     } catch {
@@ -60,10 +108,58 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       port: s.port,
       profile: path.basename(s.profileDir),
     }));
-    void this.view.webview.postMessage({ type: 'state', profile, template, servers });
+    void this.view.webview.postMessage({
+      type: 'state',
+      profile,
+      template,
+      servers,
+      recent,
+      post,
+      categories,
+    });
   }
 
-  /** 订阅 server 变化(在 extension activate 里调用一次) */
+  private async handleAiSummary(): Promise<void> {
+    if (!this.activeFile) return;
+    void this.view?.webview.postMessage({ type: 'aiBusy', on: true });
+    try {
+      const text = fs.readFileSync(this.activeFile, 'utf8');
+      const res = await generateSummary(text);
+      void this.view?.webview.postMessage({ type: 'aiResult', text: res.text, via: res.detail });
+    } catch (e) {
+      void this.view?.webview.postMessage({ type: 'error', message: (e as Error).message });
+      void this.view?.webview.postMessage({ type: 'aiBusy', on: false });
+    }
+  }
+
+  private async handlePickCover(slug: string): Promise<void> {
+    if (!this.activeFile) return;
+    const p = getProfile();
+    const picked = await pickImages(false);
+    if (!picked?.length) return;
+    const name = copyImageIn(picked[0], articleImageDir(p.postsDir, slug));
+    void this.view?.webview.postMessage({ type: 'coverPicked', ref: articleImageRef(slug, name) });
+  }
+
+  private handleSave(values: Record<string, unknown>): void {
+    if (!this.activeFile) return;
+    updatePostMeta(this.activeFile, {
+      title: String(values.title ?? ''),
+      description: String(values.description ?? ''),
+      category: String(values.category ?? ''),
+      tags: Array.isArray(values.tags) ? values.tags.map(String) : [],
+      pubDate: values.pubDate ? String(values.pubDate) : undefined,
+      draft: !!values.draft,
+      featured: !!values.featured,
+      cover: values.cover ? String(values.cover) : null,
+      coverAlt: values.cover ? String(values.coverAlt ?? '') || null : null,
+      coverPosition: values.cover ? String(values.coverPosition ?? '') || null : null,
+      updatedDate: new Date().toISOString().slice(0, 10),
+    });
+    void this.view?.webview.postMessage({ type: 'saved' });
+    this.refresh();
+  }
+
   listenServers(): vscode.Disposable {
     return onDidChangeServers(() => this.refresh());
   }
@@ -83,9 +179,12 @@ export function sidebarHtml(nonce: string): string {
   --muted: color-mix(in srgb, var(--fg) 58%, transparent);
   --faint: color-mix(in srgb, var(--fg) 38%, transparent);
   --line: color-mix(in srgb, var(--fg) 10%, transparent);
+  --line-strong: color-mix(in srgb, var(--fg) 18%, transparent);
   --raise: color-mix(in srgb, var(--fg) 4%, transparent);
+  --raise-2: color-mix(in srgb, var(--fg) 7%, transparent);
   --accent: var(--vscode-textLink-foreground, #bc6353);
   --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --err: var(--vscode-errorForeground, #e05252);
   --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
 }
 * { box-sizing: border-box; }
@@ -118,7 +217,7 @@ body { margin: 0; padding: 10px 10px 24px; color: var(--fg); background: var(--b
 .srv .p { font-weight: 600; }
 .srv .pf { color: var(--faint); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .srv button { border: 0; background: transparent; color: var(--muted); cursor: pointer; font: inherit; padding: 2px 5px; border-radius: 5px; }
-.srv button:hover { background: var(--raise); color: var(--fg); }
+.srv button:hover { background: var(--raise-2); color: var(--fg); }
 
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .grid button { display: flex; align-items: center; gap: 7px; padding: 8px 10px; border-radius: 8px;
@@ -131,61 +230,227 @@ body { margin: 0; padding: 10px 10px 24px; color: var(--fg); background: var(--b
 .ghost { width: 100%; margin-top: 6px; padding: 7px; border: 1px dashed var(--line); border-radius: 8px;
   background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
 .ghost:hover { color: var(--accent); border-color: var(--accent); }
+
+/* 最近文章 */
+.recent .row { padding: 5px 10px; }
+.rdot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.rdot.draft { background: #b07a2f; }
+.rdot.pub { background: var(--vscode-testing-iconPassed, #3fb950); }
+.rdot.bad { background: var(--err); }
+
+/* 文章属性面板 */
+#postView { display: none; }
+body.mode-post #postView { display: block; }
+body.mode-post #consoleView { display: none; }
+#postView label.f { display: block; font-size: 11px; color: var(--muted); margin: 10px 0 3px; }
+#postView input[type=text], #postView input[type=date], #postView textarea, #postView select {
+  width: 100%; padding: 5px 8px; font: inherit; font-size: 12px;
+  color: var(--fg); background: var(--raise);
+  border: 1px solid var(--line); border-radius: 7px;
+}
+#postView input:focus-visible, #postView textarea:focus-visible, #postView select:focus-visible {
+  outline: none; border-color: var(--accent);
+}
+#postView textarea { resize: vertical; min-height: 44px; }
+.p-head { padding: 2px 2px 0; }
+.p-slug { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+.p-checks { display: flex; gap: 14px; margin-top: 10px; }
+.p-checks label { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.p-checks input { accent-color: var(--accent); }
+.p-actions { display: flex; gap: 6px; margin-top: 14px; }
+.p-actions .play { flex: 1; }
+.ai-btn { font-size: 10.5px; padding: 1px 8px; border: 1px solid var(--line); border-radius: 99px;
+  background: transparent; color: var(--muted); cursor: pointer; }
+.ai-btn:hover { color: var(--accent); border-color: var(--accent); }
+.p-hint { font-size: 10.5px; color: var(--faint); margin-top: 8px; }
 </style>
 </head>
 <body>
-<div class="sec">
-  <p class="sec-t">绑定</p>
-  <div class="row" data-m="switchProfile"><span class="k">档案</span><span class="v" id="profileName">…</span><span class="tag" id="profileKind"></span><span class="arr">→</span></div>
-  <div class="row" data-m="selectTemplate"><span class="k">模板</span><span class="v" id="templateName">…</span><span class="arr">→</span></div>
-</div>
 
-<div class="sec">
-  <p class="sec-t">预览</p>
-  <button class="play" data-m="startPreview">▶ 启动预览</button>
-  <div id="servers"></div>
-  <button class="ghost" data-m="showLog">查看日志</button>
-</div>
+<div id="consoleView">
+  <div class="sec">
+    <p class="sec-t">绑定</p>
+    <div class="row" data-m="switchProfile"><span class="k">档案</span><span class="v" id="profileName">…</span><span class="tag" id="profileKind"></span><span class="arr">→</span></div>
+    <div class="row" data-m="selectTemplate"><span class="k">模板</span><span class="v" id="templateName">…</span><span class="arr">→</span></div>
+  </div>
 
-<div class="sec">
-  <p class="sec-t">管理</p>
-  <div class="grid">
-    <button data-m="openCenter"><span class="ic">▤</span>文章中心</button>
-    <button data-m="categories"><span class="ic">▦</span>分类管理</button>
-    <button data-m="links"><span class="ic">↗</span>链接管理</button>
-    <button data-m="site"><span class="ic">⚙</span>站点信息</button>
+  <div class="sec recent" id="recentSec" style="display:none">
+    <p class="sec-t">最近修改</p>
+    <div id="recent"></div>
+  </div>
+
+  <div class="sec">
+    <p class="sec-t">预览</p>
+    <button class="play" data-m="startPreview">▶ 启动预览</button>
+    <div id="servers"></div>
+    <button class="ghost" data-m="showLog">查看日志</button>
+  </div>
+
+  <div class="sec">
+    <p class="sec-t">管理</p>
+    <div class="grid">
+      <button data-m="openCenter"><span class="ic">▤</span>文章中心</button>
+      <button data-m="categories"><span class="ic">▦</span>分类管理</button>
+      <button data-m="links"><span class="ic">↗</span>链接管理</button>
+      <button data-m="site"><span class="ic">⚙</span>站点信息</button>
+    </div>
+  </div>
+
+  <div class="sec">
+    <button class="play" data-m="newPost">＋ 新建文章</button>
+    <button class="ghost" data-m="openSettings">设置</button>
   </div>
 </div>
 
-<div class="sec">
-  <button class="play" data-m="newPost">＋ 新建文章</button>
-</div>
-
-<div class="sec">
-  <p class="sec-t">设置</p>
-  <div class="row" data-m="aiSettings"><span class="k">✦</span><span class="v">AI 摘要</span><span class="arr">→</span></div>
+<div id="postView">
+  <div class="sec" style="margin-top:0">
+    <p class="sec-t">当前文章</p>
+    <div class="p-head"><span class="p-slug" id="pSlug"></span></div>
+  </div>
+  <label class="f">标题</label>
+  <input type="text" id="p_title">
+  <label class="f">描述 <button type="button" class="ai-btn" id="aiBtn" title="根据正文生成摘要">✨ AI</button></label>
+  <textarea id="p_desc"></textarea>
+  <div class="p-hint" id="aiHint"></div>
+  <label class="f">分类</label>
+  <input type="text" id="p_category" list="p_categoryList">
+  <datalist id="p_categoryList"></datalist>
+  <label class="f">标签(逗号分隔)</label>
+  <input type="text" id="p_tags">
+  <label class="f">发布日期</label>
+  <input type="date" id="p_pubDate">
+  <label class="f">封面</label>
+  <select id="p_cover"><option value="">无封面</option><option value="__pick__">从电脑选择…</option></select>
+  <label class="f">封面描述</label>
+  <input type="text" id="p_coverAlt">
+  <label class="f">裁切焦点</label>
+  <input type="text" id="p_coverPosition" placeholder="如 center 30%">
+  <div class="p-checks">
+    <label><input type="checkbox" id="p_draft">草稿</label>
+    <label><input type="checkbox" id="p_featured">精选</label>
+  </div>
+  <div class="p-actions">
+    <button class="play" id="pSave">保存</button>
+    <button class="ghost" id="pFull" style="width:auto;margin-top:0">完整编辑…</button>
+  </div>
+  <div class="p-hint">保存会同时更新 updatedDate;正文请在编辑器里写。</div>
 </div>
 
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
+const $ = (id) => document.getElementById(id);
+let currentPost = null;
+
 document.querySelectorAll('[data-m]').forEach((el) =>
   el.addEventListener('click', () => vscode.postMessage({ type: el.dataset.m })),
 );
+
+$('pSave').addEventListener('click', () => {
+  if (!currentPost) return;
+  vscode.postMessage({
+    type: 'savePost',
+    values: {
+      title: $('p_title').value.trim(),
+      description: $('p_desc').value.trim(),
+      category: $('p_category').value.trim(),
+      tags: $('p_tags').value.split(/[,\\uFF0C]/).map((s) => s.trim()).filter(Boolean),
+      pubDate: $('p_pubDate').value,
+      draft: $('p_draft').checked,
+      featured: $('p_featured').checked,
+      cover: $('p_cover').value,
+      coverAlt: $('p_coverAlt').value.trim(),
+      coverPosition: $('p_coverPosition').value.trim(),
+    },
+  });
+});
+$('pFull').addEventListener('click', () => vscode.postMessage({ type: 'openFull' }));
+$('aiBtn').addEventListener('click', () => {
+  $('aiHint').textContent = '生成中…';
+  vscode.postMessage({ type: 'aiSummary' });
+});
+$('p_cover').addEventListener('change', (e) => {
+  if (e.target.value === '__pick__' && currentPost) {
+    vscode.postMessage({ type: 'pickCover', slug: currentPost.slug });
+  }
+});
+
+function fillPost(p) {
+  currentPost = p;
+  $('pSlug').textContent = p.slug + '.md';
+  $('p_title').value = p.title;
+  $('p_desc').value = p.description;
+  $('p_category').value = p.category;
+  $('p_tags').value = (p.tags || []).join(', ');
+  $('p_pubDate').value = p.pubDate || '';
+  $('p_draft').checked = !!p.draft;
+  $('p_featured').checked = !!p.featured;
+  $('p_coverAlt').value = p.coverAlt || '';
+  $('p_coverPosition').value = p.coverPosition || '';
+  const sel = $('p_cover');
+  sel.querySelectorAll('option[data-cur]').forEach((o) => o.remove());
+  if (p.cover) {
+    const o = document.createElement('option');
+    o.value = p.cover;
+    o.textContent = p.cover;
+    o.dataset.cur = '1';
+    sel.appendChild(o);
+    sel.value = p.cover;
+  } else {
+    sel.value = '';
+  }
+}
+
 window.addEventListener('message', (e) => {
-  const { profile, template, servers } = e.data;
-  document.getElementById('profileName').textContent = profile ? profile.name : '未绑定,点击选择';
-  document.getElementById('profileKind').textContent = profile ? profile.kind : '';
-  document.getElementById('templateName').textContent = template ?? '未识别,点击选择';
-  document.getElementById('servers').innerHTML = (servers || [])
-    .map((s) => '<div class="srv"><span class="dot"></span><span class="p">:' + s.port + '</span>'
-      + '<span class="pf">' + s.profile + '</span>'
-      + '<button data-open="' + s.port + '" title="在浏览器打开">打开</button>'
-      + '<button data-stop="' + s.port + '" title="停止">✕</button></div>')
-    .join('');
-  document.querySelectorAll('[data-open]').forEach((b) =>
-    b.addEventListener('click', (ev) => { ev.stopPropagation(); vscode.postMessage({ type: 'openUrl', url: 'http://localhost:' + b.dataset.open + '/' }); }));
-  document.querySelectorAll('[data-stop]').forEach((b) =>
-    b.addEventListener('click', (ev) => { ev.stopPropagation(); vscode.postMessage({ type: 'stopServer', port: Number(b.dataset.stop) }); }));
+  const m = e.data;
+  if (m.type === 'state') {
+    $('profileName').textContent = m.profile ? m.profile.name : '未绑定,点击选择';
+    $('profileKind').textContent = m.profile ? m.profile.kind : '';
+    $('templateName').textContent = m.template ?? '未识别,点击选择';
+    $('servers').innerHTML = (m.servers || [])
+      .map((s) => '<div class="srv"><span class="dot"></span><span class="p">:' + s.port + '</span>'
+        + '<span class="pf">' + s.profile + '</span>'
+        + '<button data-open="' + s.port + '" title="在浏览器打开">打开</button>'
+        + '<button data-stop="' + s.port + '" title="停止">✕</button></div>')
+      .join('');
+    document.querySelectorAll('[data-open]').forEach((b) =>
+      b.addEventListener('click', (ev) => { ev.stopPropagation(); vscode.postMessage({ type: 'openUrl', url: 'http://localhost:' + b.dataset.open + '/' }); }));
+    document.querySelectorAll('[data-stop]').forEach((b) =>
+      b.addEventListener('click', (ev) => { ev.stopPropagation(); vscode.postMessage({ type: 'stopServer', port: Number(b.dataset.stop) }); }));
+    // 最近修改
+    const recent = m.recent || [];
+    $('recentSec').style.display = recent.length ? '' : 'none';
+    $('recent').innerHTML = recent
+      .map((r) => '<div class="row" data-file="' + r.file.replace(/"/g, '&quot;') + '">'
+        + '<span class="rdot ' + (!r.valid ? 'bad' : r.draft ? 'draft' : 'pub') + '"></span>'
+        + '<span class="v">' + (r.title || r.file).replace(/</g, '&lt;') + '</span></div>')
+      .join('');
+    document.querySelectorAll('#recent .row').forEach((el) =>
+      el.addEventListener('click', () => vscode.postMessage({ type: 'openFile', file: el.dataset.file })));
+    // 分类补全
+    $('p_categoryList').innerHTML = (m.categories || []).map((c) => '<option value="' + String(c).replace(/"/g, '&quot;') + '">').join('');
+    // 模式切换:有激活文章时填属性面板
+    document.body.classList.toggle('mode-post', !!m.post);
+    if (m.post) fillPost(m.post);
+    else currentPost = null;
+  } else if (m.type === 'aiResult') {
+    $('p_desc').value = m.text;
+    $('aiHint').textContent = '已生成(' + (m.via || '') + '),检查后保存';
+  } else if (m.type === 'aiBusy' && !m.on) {
+    $('aiHint').textContent = '';
+  } else if (m.type === 'coverPicked') {
+    const sel = $('p_cover');
+    const o = document.createElement('option');
+    o.value = m.ref;
+    o.textContent = m.ref + '(已复制)';
+    o.dataset.cur = '1';
+    sel.appendChild(o);
+    sel.value = m.ref;
+  } else if (m.type === 'saved') {
+    $('aiHint').textContent = '已保存';
+    setTimeout(() => { $('aiHint').textContent = ''; }, 1600);
+  } else if (m.type === 'error') {
+    $('aiHint').textContent = m.message || '';
+  }
 });
 </script>
 </body>

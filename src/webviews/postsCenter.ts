@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { listPosts, setPostDraft } from '../core';
-import { openPostPreview } from '../preview';
+import { openPostPreview, openSitePreview, startPreview } from '../preview';
 import { getProfile, assertProfileUnchanged, openFile, resolveImageUri } from '../util';
 import { openNewPostForm, openPostEditor } from './newPost';
 import { pageShell, SCRIPT_PREAMBLE } from './shared';
@@ -104,6 +104,7 @@ function body(): string {
   <button class="chip" id="fCover" aria-pressed="false">有封面</button>
   <button class="chip" id="fFeat" aria-pressed="false">精选</button>
   <span class="count" id="count"></span>
+  <button class="small" id="previewSite">演示预览</button>
   <button class="primary" id="newPost">新建文章</button>
 </div>
 
@@ -232,6 +233,7 @@ $('fSort').addEventListener('change', () => {
   }),
 );
 $('newPost').addEventListener('click', () => vscode.postMessage({ type: 'newPost' }));
+$('previewSite').addEventListener('click', () => vscode.postMessage({ type: 'previewSite' }));
 
 document.querySelectorAll('th[data-sort]').forEach((th) =>
   th.addEventListener('click', () => {
@@ -388,6 +390,12 @@ export function openPostsCenter(): void {
         await openPostPreview(msg.file);
       } else if (msg.type === 'newPost') {
         openNewPostForm(() => sendInit());
+      } else if (msg.type === 'previewSite') {
+        const rec = await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: '正在启动 dev server…' },
+          () => startPreview(),
+        );
+        await openSitePreview(rec);
       } else if (msg.type === 'setDraft') {
         assertProfileUnchanged(profile);
         const files: string[] = msg.files ?? [];
