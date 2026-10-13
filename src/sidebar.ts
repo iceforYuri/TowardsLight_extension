@@ -14,6 +14,8 @@ interface RecentPost {
   title: string;
   draft: boolean;
   valid: boolean;
+  /** 最近修改日期(YYYY-MM-DD) */
+  mtime: string;
 }
 
 /**
@@ -89,7 +91,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         .map((x) => ({ x, m: fs.statSync(x.file).mtimeMs }))
         .sort((a, b) => b.m - a.m)
         .slice(0, 5)
-        .map(({ x }) => ({ file: x.file, title: x.title, draft: x.draft, valid: x.valid }));
+        .map(({ x, m }) => ({
+          file: x.file,
+          title: x.title,
+          draft: x.draft,
+          valid: x.valid,
+          mtime: new Date(m).toISOString().slice(0, 10),
+        }));
       categories = [...new Set(posts.map((x) => x.category).filter(Boolean))].sort();
       // 属性面板:活动编辑器里的档案内 md
       const file = vscode.window.activeTextEditor?.document.fileName;
@@ -442,7 +450,8 @@ window.addEventListener('message', (e) => {
     $('recent').innerHTML = recent
       .map((r) => '<div class="row" data-file="' + r.file.replace(/"/g, '&quot;') + '">'
         + '<span class="rdot ' + (!r.valid ? 'bad' : r.draft ? 'draft' : 'pub') + '"></span>'
-        + '<span class="v">' + (r.title || r.file).replace(/</g, '&lt;') + '</span></div>')
+        + '<span class="v">' + (r.title || r.file).replace(/</g, '&lt;') + '</span>'
+        + '<span class="tag">' + r.mtime + '</span></div>')
       .join('');
     document.querySelectorAll('#recent .row').forEach((el) =>
       el.addEventListener('click', () => vscode.postMessage({ type: 'openFile', file: el.dataset.file })));
