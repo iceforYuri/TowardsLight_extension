@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as vscode from 'vscode';
-import { addIcon, lucideIconBody } from './core';
+import { addIcon, initProfile, lucideIconBody } from './core';
 import { articleImageDir, articleImageRef, copyImageIn } from './core/images';
 import { initAi } from './ai';
 import { openAiSettingsForm } from './webviews/aiSettings';
@@ -160,10 +160,15 @@ async function switchProfileCommand(
   if (!dir) return;
   const missing = ['site.ts', 'links.ts', 'posts'].filter((p) => !fs.existsSync(path.join(dir, p)));
   if (missing.length) {
-    vscode.window.showErrorMessage(
-      `「${dir}」不是有效档案:缺少 ${missing.join('、')}(可用 node scripts/new-profile.mjs 生成骨架)`,
+    // 任意目录可初始化为档案:内置骨架只补缺的,已有文件不动
+    const answer = await vscode.window.showWarningMessage(
+      `「${path.basename(dir)}」还不是档案(缺少 ${missing.join('、')})。初始化为档案?会补齐 site.ts / links.ts / posts/ / images/,已有文件不动`,
+      { modal: true },
+      '初始化',
     );
-    return;
+    if (answer !== '初始化') return;
+    const created = initProfile(dir, path.join(context.extensionPath, 'templates', 'profile'));
+    vscode.window.showInformationMessage(`档案骨架已就绪:${created.join('、') || '无需新增'}`);
   }
   process.env.SITE_PROFILE_DIR = dir;
   await context.workspaceState.update('towardsLight.profileDir', dir);

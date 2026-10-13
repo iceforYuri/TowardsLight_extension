@@ -329,6 +329,16 @@ assert.ok(afterText.includes('customField: 别动我'), '未知字段保留');
 assert.ok(afterText.includes('正文内容不要动'), '正文保留');
 ok('updatePostMeta 就地改写 + 删字段 + 保留正文与未知字段');
 
+// initProfile:缺什么补什么,已有文件不动
+const profDir = path.join(tmp, 'new-prof');
+fs.mkdirSync(profDir, { recursive: true });
+fs.writeFileSync(path.join(profDir, 'site.ts'), '// 我自己的 site.ts\n');
+const created = core.initProfile(profDir, path.join(ROOT, 'editor', 'templates', 'profile'));
+assert.ok(created.includes('links.ts') && created.includes('posts/') && created.includes('images/'));
+assert.ok(!created.includes('site.ts'), '已有 site.ts 不动');
+assert.equal(fs.readFileSync(path.join(profDir, 'site.ts'), 'utf8'), '// 我自己的 site.ts\n');
+ok('initProfile 只补缺的');
+
 // ── profile 解析 ──
 const fakeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'tl-root-'));
 fs.mkdirSync(path.join(fakeRoot, 'src', 'profiles', 'showcase', 'posts'), { recursive: true });
