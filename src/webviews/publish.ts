@@ -22,6 +22,7 @@ function body(): string {
   <span class="hint" id="fileCount" style="margin:0"></span>
   <button class="small" id="toggleAll" type="button">全不选</button>
 </div>
+<div class="hint" id="focusHint" style="display:none;margin:0 0 8px"></div>
 <div class="flist" id="fileList"></div>
 `;
   const message = `
@@ -76,6 +77,8 @@ function script(): string {
 let repos = [];
 let currentRoot = '';
 let files = [];
+// 文章级提交的预选范围:{ file: 文章的仓库相对路径, dir: 图片目录前缀 };空为全局面板
+let currentFocus = null;
 
 function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
@@ -88,6 +91,10 @@ function chipTitle(xy) {
   if (xy === '??') return '未跟踪';
   const s = chipOf(xy);
   return s === 'A' ? '新增' : s === 'D' ? '删除' : '修改';
+}
+function isFocused(f) {
+  if (!currentFocus) return true; // 无预选范围时默认全选
+  return f.file === currentFocus.file || (currentFocus.dir && f.file.startsWith(currentFocus.dir));
 }
 function renderRepos() {
   const sel = $('repoSel');
@@ -111,18 +118,31 @@ function renderFiles() {
     list.innerHTML = '<div class="fempty">工作区干净,没有要提交的变更</div>';
     $('fileCount').textContent = '';
     $('toggleAll').style.display = 'none';
+    $('focusHint').style.display = 'none';
     $('submit').disabled = true;
     return;
   }
   $('toggleAll').style.display = '';
+  let focusedCount = 0;
   list.innerHTML = files
     .map((f) => {
       const c = chipOf(f.xy);
-      return '<label class="frow"><input type="checkbox" data-file="' + esc(f.file) + '" checked>'
+      const on = isFocused(f);
+      if (on && currentFocus) focusedCount++;
+      return '<label class="frow"><input type="checkbox" data-file="' + esc(f.file) + '"' + (on ? ' checked' : '') + '>'
         + '<span class="fchip ' + c + '" title="' + chipTitle(f.xy) + '">' + c + '</span>'
         + '<span class="fpath">' + esc(f.file) + '</span></label>';
     })
     .join('');
+  const fh = $('focusHint');
+  if (currentFocus) {
+    fh.style.display = '';
+    fh.textContent = focusedCount
+      ? '已勾选当前文章与其图片,其余变更未选'
+      : '当前文章没有未提交的变更,可手动勾选其他文件';
+  } else {
+    fh.style.display = 'none';
+  }
   updateCount();
 }
 function checkedFiles() {
@@ -185,6 +205,7 @@ window.addEventListener('message', (e) => {
     renderRepos();
   } else if (m.type === 'status') {
     if (m.root !== currentRoot) return;
+    currentFocus = m.focus || null;
     files = m.files || [];
     renderFiles();
   } else if (m.type === 'aiDone') {
@@ -213,14 +234,35 @@ vscode.postMessage({ type: 'ready' });
 let panel: vscode.WebviewPanel | undefined;
 /** 表单打开那一刻锁定的档案,提交前校验未切换(与其他表单同一守卫) */
 let openedProfile: ProfileInfo | undefined;
+/** 文章级提交的预选范围(当前文章 + 它的图片目录);从控制台进入为空 */
+export interface PublishFocus {
+  file: string;
+  imageDir: string;
+}
+let pendingFocus: PublishFocus | undefined;
 
-export function openPublish(): void {
+export function openPublish(focus?: PublishFocus): void {
   if (panel) {
-    panel.reveal();
+    const p = panel;
+    // 档案变了就整个重开(徽章与守卫都锚定在打开时的档案上)
+    try {
+      const now = getProfile();
+      if (openedProfile && now.dir !== openedProfile.dir) {
+        p.dispose(); // onDidDispose 会清掉模块级 panel
+        openPublish(focus);
+        return;
+      }
+      pendingFocus = focus;
+      sendInit(p, now.dir);
+    } catch {
+      /* 未绑定时沿用现有面板 */
+    }
+    p.reveal();
     return;
   }
   const profile = getProfile(); // 未绑定时抛错,由命令层 guard 弹出
   openedProfile = profile;
+  pendingFocus = focus;
   panel = vscode.window.createWebviewPanel('towardsLightPublish', '提交更改', vscode.ViewColumn.One, {
     enableScripts: true,
     retainContextWhenHidden: true,
@@ -260,6 +302,7 @@ export function openPublish(): void {
           push(root);
           pushed = true;
         }
+        pendingFocus = undefined; // 文章级提交完成后回到全局面板
         panel.webview.postMessage({ type: 'committed', pushed });
         sendStatus(panel, root);
       }
@@ -292,5 +335,19 @@ function sendInit(p: vscode.WebviewPanel, profileDir: string): void {
 
 function sendStatus(p: vscode.WebviewPanel, root: string): void {
   if (!root) return;
-  p.webview.postMessage({ type: 'status', root, files: statusFiles(root) });
+  // 文章级提交:把文章与其图片目录换算成该仓库的相对路径,交给面板做预选;
+  // 目标仓库不包含这些路径时(用户切到了别的仓库)自然落空,退回全选
+  let focus: { file: string | null; dir: string | null } | null = null;
+  if (pendingFocus) {
+    const relFile = relInRepo(root, pendingFocus.file);
+    const relDir = relInRepo(root, pendingFocus.imageDir);
+    if (relFile || relDir) focus = { file: relFile, dir: relDir ? relDir + '/' : null };
+  }
+  p.webview.postMessage({ type: 'status', root, files: statusFiles(root), focus });
+}
+
+/** target 在仓库 root 内则返回正斜杠相对路径,否则 null */
+function relInRepo(root: string, target: string): string | null {
+  const rel = path.relative(root, target).split(path.sep).join('/');
+  return rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel : null;
 }

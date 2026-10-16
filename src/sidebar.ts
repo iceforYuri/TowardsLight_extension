@@ -9,6 +9,7 @@ import { detectRepos } from './git';
 import { listServers, onDidChangeServers } from './preview';
 import { getProfile, pickImages, getTemplateDir, workspaceRoot } from './util';
 import { openPostEditor } from './webviews/newPost';
+import { openPublish } from './webviews/publish';
 import { COMBO_CSS, COMBO_SCRIPT } from './webviews/shared';
 
 interface RecentPost {
@@ -74,6 +75,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         } else if (msg.type === 'openFull' && this.activeFile) {
           const file = this.activeFile;
           openPostEditor(() => this.refresh(), file);
+        } else if (msg.type === 'publishPost' && this.activeFile) {
+          // 文章级提交:打开提交面板,预选当前文章与它的图片目录
+          const file = this.activeFile;
+          const p = getProfile();
+          const slug = path.basename(file, '.md');
+          openPublish({ file, imageDir: articleImageDir(p.postsDir, slug) });
         } else if (msg.type === 'aiSummary' && this.activeFile) {
           await this.handleAiSummary();
         } else if (msg.type === 'pickCover' && this.activeFile) {
@@ -414,6 +421,7 @@ ${COMBO_CSS}
   </div>
   <div class="p-actions">
     <button class="play" id="pSave">保存</button>
+    <button class="ghost" id="pPublish" style="width:auto;margin-top:0" title="把当前文章与它的图片提交进 git">提交…</button>
     <button class="ghost" id="pFull" style="width:auto;margin-top:0">完整编辑…</button>
   </div>
   <div class="p-hint">保存会同时更新 updatedDate;正文请在编辑器里写。</div>
@@ -462,6 +470,14 @@ $('pSave').addEventListener('click', () => {
   });
 });
 $('pFull').addEventListener('click', () => vscode.postMessage({ type: 'openFull' }));
+$('pPublish').addEventListener('click', () => {
+  if (!currentPost) return;
+  if (dirty) {
+    $('aiHint').textContent = '有未保存的修改,先点「保存」再提交';
+    return;
+  }
+  vscode.postMessage({ type: 'publishPost' });
+});
 $('aiBtn').addEventListener('click', () => {
   $('aiHint').textContent = '生成中…';
   vscode.postMessage({ type: 'aiSummary' });
