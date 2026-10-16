@@ -535,3 +535,207 @@ export function cardHtml(id: string, idx: string, title: string, hint: string, i
   ${inner}
 </section>`;
 }
+
+/**
+ * 下拉选择器(替代原生 datalist,原生弹层是 Chromium 默认样式,与 Studio 视觉不搭)。
+ * 变量全部带兜底,侧栏(自有变量表)与 pageShell 表单都能用。
+ */
+export const COMBO_CSS = `
+.combo { position: relative; }
+.combo-box { display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+  padding: 4px 8px; min-height: 33px; cursor: text;
+  color: var(--vscode-input-foreground, var(--fg));
+  background: var(--input-bg, var(--raise));
+  border: 1px solid var(--vscode-input-border, var(--line)); border-radius: 7px;
+  transition: border-color 0.18s var(--ease, ease), box-shadow 0.18s var(--ease, ease); }
+.combo-box:hover { border-color: var(--line-strong); }
+.combo-box:focus-within { border-color: var(--focus, var(--accent));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus, var(--accent)) 22%, transparent); }
+.chip { display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 4px 1px 9px; border-radius: 99px; font-size: 11.5px; line-height: 1.7;
+  background: var(--accent-soft); color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+.chip button { border: 0; background: transparent; color: inherit; cursor: pointer;
+  padding: 0 2px; font: inherit; font-size: 13px; line-height: 1; border-radius: 50%; opacity: 0.7; }
+.chip button:hover { opacity: 1; }
+input.combo-in { flex: 1; min-width: 72px; width: auto !important; border: 0 !important;
+  background: transparent !important; box-shadow: none !important; padding: 2px 0 !important; }
+.combo-drop { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30;
+  max-height: 210px; overflow-y: auto; padding: 4px;
+  background: var(--vscode-editor-background, var(--bg));
+  border: 1px solid var(--line-strong); border-radius: 9px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28); display: none; }
+.combo.open .combo-drop { display: block; }
+.combo-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  border-radius: 6px; cursor: pointer; font-size: 12.5px; }
+.combo-item .plus { color: var(--accent); font-family: var(--mono, monospace); font-size: 11px; flex: none; }
+.combo-item:hover, .combo-item.hot { background: var(--accent-soft); }
+.combo-item.hot { color: var(--accent); }
+.combo-empty { padding: 8px 10px; color: var(--faint); font-size: 12px; }
+`;
+
+/**
+ * 下拉选择器行为。comboSingle(分类):input 本身即值,下拉给已有选项,输入新名称合法;
+ * comboMulti(标签):chips + 输入框,值镜像到 hidden input(逗号分隔,兼容既有提交与状态持久化),
+ * 外部改写 hidden(状态恢复/表单填充)时自动重建 chips。
+ */
+export const COMBO_SCRIPT = `
+function __esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
+function comboSingle(input, drop, getOptions) {
+  const wrap = input.closest('.combo');
+  let list = [];
+  let hot = -1;
+  function close() { wrap.classList.remove('open'); }
+  function isOpen() { return wrap.classList.contains('open'); }
+  function updateHot() {
+    drop.querySelectorAll('.combo-item').forEach((el, i) => el.classList.toggle('hot', i === hot));
+  }
+  function render() {
+    const q = input.value.trim();
+    const all = getOptions();
+    list = all.filter((t) => !q || t.toLowerCase().indexOf(q.toLowerCase()) >= 0).slice(0, 60)
+      .map((t) => ({ value: t, isNew: false }));
+    if (q && all.indexOf(q) < 0) list.unshift({ value: q, isNew: true });
+    hot = list.length ? 0 : -1;
+    drop.innerHTML = list.length ? '' : '<div class="combo-empty">没有可选项,直接输入新名称</div>';
+    list.forEach((o, i) => {
+      const el = document.createElement('div');
+      el.className = 'combo-item';
+      el.innerHTML = (o.isNew ? '<span class="plus">新建</span>' : '') + '<span>' + __esc(o.value) + '</span>';
+      el.addEventListener('mousedown', (e) => { e.preventDefault(); pick(i); });
+      drop.appendChild(el);
+    });
+    updateHot();
+  }
+  function open() { render(); wrap.classList.add('open'); }
+  function pick(i) {
+    const o = list[i];
+    if (!o) return;
+    input.value = o.value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    close();
+  }
+  input.setAttribute('autocomplete', 'off');
+  input.addEventListener('focus', open);
+  input.addEventListener('input', (e) => { if (e.isTrusted) { isOpen() ? render() : open(); } });
+  input.addEventListener('blur', () => setTimeout(close, 100));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!isOpen()) return open();
+      if (!list.length) return;
+      hot = (hot + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length;
+      updateHot();
+    } else if (e.key === 'Enter') {
+      if (isOpen() && hot >= 0) { e.preventDefault(); pick(hot); }
+      else close();
+    } else if (e.key === 'Escape') {
+      close();
+    }
+  });
+}
+function comboMulti(box, input, drop, hidden, getOptions) {
+  const wrap = box.closest('.combo');
+  let items = [];
+  let list = [];
+  let hot = -1;
+  function close() { wrap.classList.remove('open'); }
+  function isOpen() { return wrap.classList.contains('open'); }
+  function updateHot() {
+    drop.querySelectorAll('.combo-item').forEach((el, i) => el.classList.toggle('hot', i === hot));
+  }
+  function syncHidden() {
+    const v = items.join(', ');
+    if (hidden.value !== v) {
+      hidden.value = v;
+      hidden.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+  function renderChips() {
+    box.querySelectorAll('.chip').forEach((c) => c.remove());
+    items.forEach((t, i) => {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      const label = document.createElement('span');
+      label.textContent = t;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = '×';
+      btn.setAttribute('aria-label', '移除 ' + t);
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        items.splice(i, 1);
+        renderChips(); syncHidden(); render();
+        input.focus();
+      });
+      chip.appendChild(label);
+      chip.appendChild(btn);
+      box.insertBefore(chip, input);
+    });
+  }
+  function render() {
+    const q = input.value.trim();
+    const all = getOptions();
+    list = all.filter((t) => items.indexOf(t) < 0 && (!q || t.toLowerCase().indexOf(q.toLowerCase()) >= 0))
+      .slice(0, 60).map((t) => ({ value: t, isNew: false }));
+    if (q && all.indexOf(q) < 0 && items.indexOf(q) < 0) list.unshift({ value: q, isNew: true });
+    hot = list.length ? 0 : -1;
+    drop.innerHTML = list.length ? '' : '<div class="combo-empty">没有可选项</div>';
+    list.forEach((o, i) => {
+      const el = document.createElement('div');
+      el.className = 'combo-item';
+      el.innerHTML = (o.isNew ? '<span class="plus">新建</span>' : '') + '<span>' + __esc(o.value) + '</span>';
+      el.addEventListener('mousedown', (e) => { e.preventDefault(); pick(i); });
+      drop.appendChild(el);
+    });
+    updateHot();
+  }
+  function open() { render(); wrap.classList.add('open'); }
+  function add(v) {
+    v = v.trim();
+    input.value = '';
+    if (v && items.indexOf(v) < 0) {
+      items.push(v);
+      renderChips(); syncHidden();
+    }
+    render();
+  }
+  function pick(i) {
+    const o = list[i];
+    if (o) add(o.value);
+    input.focus();
+  }
+  box.addEventListener('mousedown', (e) => { if (e.target === box) { e.preventDefault(); input.focus(); } });
+  input.addEventListener('focus', open);
+  input.addEventListener('input', (e) => { if (e.isTrusted) { isOpen() ? render() : open(); } });
+  input.addEventListener('blur', () => setTimeout(close, 100));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!isOpen()) return open();
+      if (!list.length) return;
+      hot = (hot + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length;
+      updateHot();
+    } else if (e.key === 'Enter' || e.key === ',' || e.key === '，') {
+      e.preventDefault();
+      if (isOpen() && hot >= 0 && list[hot]) pick(hot);
+      else add(input.value);
+    } else if (e.key === 'Backspace' && !input.value && items.length) {
+      items.pop(); renderChips(); syncHidden(); render();
+    } else if (e.key === 'Escape') {
+      close();
+    }
+  });
+  hidden.addEventListener('input', () => {
+    const arr = hidden.value.split(/[,\\uFF0C]/).map((s) => s.trim()).filter(Boolean);
+    if (arr.join(', ') !== items.join(', ')) { items = arr; renderChips(); }
+  });
+  return {
+    set(arr) { items = (arr || []).slice(); renderChips(); syncHidden(); },
+    get() { return items.slice(); },
+  };
+}
+`;
+

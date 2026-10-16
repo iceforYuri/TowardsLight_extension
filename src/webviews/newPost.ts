@@ -13,7 +13,7 @@ import {
 import { articleImageDir, articleImageRef, copyImageIn } from '../core/images';
 import { listImages, ProfileInfo } from '../core/profile';
 import { assertProfileUnchanged, getProfile, pickImages, resolveImageUri } from '../util';
-import { cardHtml, pageShell, SCRIPT_PREAMBLE } from './shared';
+import { cardHtml, COMBO_CSS, COMBO_SCRIPT, pageShell, SCRIPT_PREAMBLE } from './shared';
 
 const CHECK_SVG = '<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>';
 
@@ -30,8 +30,10 @@ function body(edit: boolean): string {
   </div>
   <div>
     <label class="f">分类 <span class="req">*</span></label>
-    <input type="text" id="category" list="categoryList">
-    <datalist id="categoryList"></datalist>
+    <div class="combo">
+      <input type="text" id="category" placeholder="选择或输入新分类…">
+      <div class="combo-drop" id="categoryDrop"></div>
+    </div>
   </div>
 </div>
 
@@ -43,8 +45,11 @@ function body(edit: boolean): string {
 <textarea id="description" placeholder="一句话摘要,出现在列表、文章头部和 RSS 里"></textarea>
 
 <label class="f">标签</label>
-<input type="text" id="tags" list="tagsList" placeholder="用逗号分隔,如 Astro, 写作">
-<datalist id="tagsList"></datalist>
+<div class="combo">
+  <div class="combo-box" id="tagsBox"><input type="text" class="combo-in" id="tagsIn" placeholder="选择或输入新标签…"></div>
+  <div class="combo-drop" id="tagsDrop"></div>
+</div>
+<input type="hidden" id="tags">
 ${
   edit
     ? `
@@ -81,6 +86,7 @@ ${
 </div>`;
 
   return `
+<style>${COMBO_CSS}</style>
 <div class="kicker">Towards Light · Studio</div>
 <h1>${edit ? '编辑文章信息' : '新建文章'}</h1>
 <p class="sub">${edit ? '就地改写 frontmatter 元数据,正文与图片文件不动。' : '生成到当前档案的 posts 目录,归档、标签、分类页自动收录。'}</p>
@@ -96,9 +102,17 @@ ${cardHtml('c2', '02', '封面', '可选;没有封面的文章同样成立', cov
 function script(edit: boolean): string {
   return (
     SCRIPT_PREAMBLE +
+    COMBO_SCRIPT +
     `
 const EDIT = ${edit};
 let allTags = [];
+let allCategories = [];
+// 分类单选 / 标签多选 chips;标签值镜像到隐藏的 #tags,提交与状态恢复逻辑不变
+const tagCombo = comboMulti($('tagsBox'), $('tagsIn'), $('tagsDrop'), $('tags'), () => allTags);
+comboSingle($('category'), $('categoryDrop'), () => allCategories);
+if ($('tags').value) {
+  tagCombo.set($('tags').value.split(/[,\\uFF0C]/).map((s) => s.trim()).filter(Boolean));
+}
 function slugify(t) {
   return t.toLowerCase().normalize('NFKD')
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -127,28 +141,8 @@ window.addEventListener('message', (e) => {
     return;
   }
   if (msg.type === 'init') {
-    const dl = $('categoryList');
-    for (const c of msg.categories) {
-      const o = document.createElement('option');
-      o.value = c;
-      dl.appendChild(o);
-    }
-    // 标签补全:datalist 的 option 必须是完整输入值,按最后一个逗号切出前缀,
-    // 候选 = 前缀 + 标签;已入选的和正在输入的 token 不再建议
+    allCategories = msg.categories || [];
     allTags = msg.tags || [];
-    const tagsInput = $('tags');
-    const renderTagOptions = () => {
-      const v = tagsInput.value;
-      const cut = Math.max(v.lastIndexOf(','), v.lastIndexOf('\\uFF0C'));
-      const prefix = cut >= 0 ? v.slice(0, cut + 1) + ' ' : '';
-      const parts = v.split(/[,\\uFF0C]/).map((s) => s.trim());
-      const cur = parts.pop();
-      $('tagsList').innerHTML = allTags
-        .filter((t) => t !== cur && !parts.includes(t))
-        .map((t) => '<option value="' + (prefix + t).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '">')
-        .join('');
-    };
-    tagsInput.addEventListener('input', renderTagOptions);
     const sel = $('cover');
     for (const c of msg.covers) {
       const o = document.createElement('option');
@@ -162,8 +156,8 @@ window.addEventListener('message', (e) => {
       $('slug').value = post.slug;
       $('category').value = post.category;
       $('description').value = post.description;
-      $('tags').value = post.tags.join(', ');
-      renderTagOptions();
+      $('tags').value = '';
+      tagCombo.set(post.tags || []);
       if ($('pubDate')) $('pubDate').value = post.pubDate || '';
       $('draft').checked = post.draft;
       if ($('featured')) $('featured').checked = !!post.featured;
@@ -180,7 +174,6 @@ window.addEventListener('message', (e) => {
     } else {
       restoreState();
     }
-    renderTagOptions();
     bindThumb('cover');
   } else if (msg.type === 'coverPicked') {
     const sel = $('cover');

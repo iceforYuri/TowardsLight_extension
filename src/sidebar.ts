@@ -9,6 +9,7 @@ import { detectRepos } from './git';
 import { listServers, onDidChangeServers } from './preview';
 import { getProfile, pickImages, getTemplateDir, workspaceRoot } from './util';
 import { openPostEditor } from './webviews/newPost';
+import { COMBO_CSS, COMBO_SCRIPT } from './webviews/shared';
 
 interface RecentPost {
   file: string;
@@ -299,6 +300,7 @@ body.mode-post #consoleView { display: none; }
   background: transparent; color: var(--muted); cursor: pointer; }
 .ai-btn:hover { color: var(--accent); border-color: var(--accent); }
 .p-hint { font-size: 10.5px; color: var(--faint); margin-top: 8px; }
+${COMBO_CSS}
 </style>
 </head>
 <body>
@@ -353,11 +355,16 @@ body.mode-post #consoleView { display: none; }
   <textarea id="p_desc"></textarea>
   <div class="p-hint" id="aiHint"></div>
   <label class="f">分类</label>
-  <input type="text" id="p_category" list="p_categoryList">
-  <datalist id="p_categoryList"></datalist>
-  <label class="f">标签(逗号分隔,有补全)</label>
-  <input type="text" id="p_tags" list="p_tagsList">
-  <datalist id="p_tagsList"></datalist>
+  <div class="combo">
+    <input type="text" id="p_category" placeholder="选择或输入新分类…">
+    <div class="combo-drop" id="p_categoryDrop"></div>
+  </div>
+  <label class="f">标签</label>
+  <div class="combo">
+    <div class="combo-box" id="p_tagsBox"><input type="text" class="combo-in" id="p_tagsIn" placeholder="选择或输入新标签…"></div>
+    <div class="combo-drop" id="p_tagsDrop"></div>
+  </div>
+  <input type="hidden" id="p_tags">
   <label class="f">发布日期</label>
   <input type="date" id="p_pubDate">
   <label class="f">封面</label>
@@ -427,21 +434,12 @@ $('p_cover').addEventListener('change', (e) => {
   }
 });
 
-// 标签补全:datalist 的 option 必须是完整输入值,所以按最后一个逗号切出前缀,
-// 候选 = 前缀 + 标签;已入选的和正在输入的 token 不再建议
+// 分类/标签下拉选择器(替代原生 datalist):分类单选、标签多选 chips,值镜像到 #p_tags
+${COMBO_SCRIPT}
 let allTags = [];
-function renderTagOptions() {
-  const v = $('p_tags').value;
-  const cut = Math.max(v.lastIndexOf(','), v.lastIndexOf('\\uFF0C'));
-  const prefix = cut >= 0 ? v.slice(0, cut + 1) + ' ' : '';
-  const parts = v.split(/[,\\uFF0C]/).map((s) => s.trim());
-  const cur = parts.pop();
-  $('p_tagsList').innerHTML = allTags
-    .filter((t) => t !== cur && !parts.includes(t))
-    .map((t) => '<option value="' + (prefix + t).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '">')
-    .join('');
-}
-$('p_tags').addEventListener('input', renderTagOptions);
+let allCategories = [];
+const tagCombo = comboMulti($('p_tagsBox'), $('p_tagsIn'), $('p_tagsDrop'), $('p_tags'), () => allTags);
+comboSingle($('p_category'), $('p_categoryDrop'), () => allCategories);
 
 function fillPost(p) {
   currentPost = p;
@@ -449,8 +447,7 @@ function fillPost(p) {
   $('p_title').value = p.title;
   $('p_desc').value = p.description;
   $('p_category').value = p.category;
-  $('p_tags').value = (p.tags || []).join(', ');
-  renderTagOptions();
+  tagCombo.set(p.tags || []);
   $('p_pubDate').value = p.pubDate || '';
   $('p_draft').checked = !!p.draft;
   $('p_featured').checked = !!p.featured;
@@ -497,11 +494,9 @@ window.addEventListener('message', (e) => {
       .join('');
     document.querySelectorAll('#recent .row').forEach((el) =>
       el.addEventListener('click', () => vscode.postMessage({ type: 'openFile', file: el.dataset.file })));
-    // 分类补全
-    $('p_categoryList').innerHTML = (m.categories || []).map((c) => '<option value="' + String(c).replace(/"/g, '&quot;') + '">').join('');
-    // 标签补全池
+    // 分类/标签下拉候选池
+    allCategories = m.categories || [];
     allTags = m.tags || [];
-    renderTagOptions();
     // 提交入口:档案/工作区都不在 git 仓库里时禁用
     $('publishBtn').disabled = !m.git;
     $('publishBtn').title = m.git ? '把档案的改动提交进 git 仓库' : '档案与工作区都不在 git 仓库中';
