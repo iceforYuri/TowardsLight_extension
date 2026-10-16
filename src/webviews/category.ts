@@ -7,13 +7,14 @@ function body(): string {
   return `
 <div class="kicker">Towards Light · Studio</div>
 <h1>管理分类</h1>
-<p class="sub">写进 site.ts 的 categoryMeta;文章 frontmatter 里用同名 category 即归入。分类名是文章的归属 key,创建后不可改。</p>
+<p class="sub">写进 site.ts 的 categoryMeta;文章 frontmatter 里用同名 category 即归入。文章在用但没登记的分类也会列出,可一键补登记。</p>
 
 <section class="card">
   <label class="f">选择分类</label>
   <select id="mode">
     <option value="__new__">＋ 新建分类</option>
   </select>
+  <div class="hint" id="modeHint"></div>
 
   <label class="f">分类名 <span class="req">*</span></label>
   <input type="text" id="name" placeholder="如:读书" autofocus>
@@ -86,12 +87,25 @@ function onIconChange() { syncPreview(); }
 
 function editing() { return $('mode').value !== '__new__'; }
 function applyMode() {
-  const isEdit = editing();
-  $('name').disabled = isEdit;
-  $('submit').textContent = isEdit ? '保存修改' : '添加';
+  const opt = $('mode').selectedOptions[0];
+  const isUnreg = !!(opt && opt.dataset.unreg);
+  const isEdit = editing() && !isUnreg;
+  $('name').disabled = isEdit || isUnreg;
+  $('submit').textContent = isEdit ? '保存修改' : isUnreg ? '登记该分类' : '添加';
   $('renameRow').style.display = isEdit ? 'block' : 'none';
   $('delete').style.display = isEdit ? '' : 'none';
-  if (isEdit) {
+  if (isUnreg) {
+    // 文章在用但未登记进 site.ts 的分类:锁定名字,补登记后即可配置图标/色调/描述
+    $('name').value = $('mode').value;
+    $('description').value = '';
+    $('renameTo').value = '';
+    selectedIcon = '';
+    $('iconValue').value = '';
+    setTone('accent');
+    renderIcons();
+    $('modeHint').textContent = '正被 ' + (refCounts[$('mode').value] ?? 0) + ' 篇文章使用,但还没登记进 site.ts';
+  } else if (isEdit) {
+    $('modeHint').textContent = '';
     const name = $('mode').value;
     const c = categories.find((x) => x.name === name);
     const refs = refCounts[name] ?? 0;
@@ -110,6 +124,7 @@ function applyMode() {
       renderIcons();
     }
   } else {
+    $('modeHint').textContent = '';
     $('name').value = '';
     $('description').value = '';
     $('renameTo').value = '';
@@ -142,6 +157,15 @@ window.addEventListener('message', (e) => {
       o.dataset.cat = '1';
       sel.appendChild(o);
     }
+    // 文章在用但没登记进 site.ts 的分类:列出来,选中即进入补登记模式
+    for (const name of msg.unregistered || []) {
+      const o = document.createElement('option');
+      o.value = name;
+      o.textContent = name + '(未登记 · ' + (refCounts[name] ?? 0) + ' 篇)';
+      o.dataset.cat = '1';
+      o.dataset.unreg = '1';
+      sel.appendChild(o);
+    }
     renderIcons();
     restoreState();
     applyMode();
@@ -160,9 +184,12 @@ window.addEventListener('message', (e) => {
 
 $('submit').addEventListener('click', () => {
   showError('');
+  const opt = $('mode').selectedOptions[0];
+  // 未登记分类走 create(登记进 site.ts),不是 edit
+  const isEdit = editing() && !(opt && opt.dataset.unreg);
   vscode.postMessage({
     type: 'submit',
-    mode: editing() ? 'edit' : 'create',
+    mode: isEdit ? 'edit' : 'create',
     value: {
       name: $('name').value.trim(),
       renameTo: $('renameTo').value.trim(),
@@ -201,11 +228,18 @@ function sendInit(): void {
   for (const p of listPosts(profile.postsDir)) {
     if (p.category) refCounts[p.category] = (refCounts[p.category] ?? 0) + 1;
   }
+  const categories = readCategories(profile.siteFile);
+  // 文章在用但没登记进 site.ts 的分类:也列进面板,让「直接用」与「登记元数据」不脱节
+  const registered = new Set(categories.map((c) => c.name));
+  const unregistered = Object.keys(refCounts)
+    .filter((c) => !registered.has(c))
+    .sort();
   void panel.webview.postMessage({
     type: 'init',
     icons: readIcons(profile.iconFile),
-    categories: readCategories(profile.siteFile),
+    categories,
     refCounts,
+    unregistered,
   });
 }
 
