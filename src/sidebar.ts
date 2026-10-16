@@ -30,6 +30,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private activeFile: string | undefined;
   /** git 可用性按档案目录缓存,不每次 refresh 都跑 git 探测 */
   private repoCache: { dir: string; ok: boolean } | undefined;
+  /** 文章目录指纹:没变就复用派生数据(最近修改/分类/标签池),切 Tab 不重解析 */
+  private postsFp: string | undefined;
+  private postsDerived: { recent: RecentPost[]; categories: string[]; tags: string[] } = {
+    recent: [],
+    categories: [],
+    tags: [],
+  };
 
   resolveWebviewView(view: vscode.WebviewView): void {
     this.view = view;
@@ -85,10 +92,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     if (!this.view) return;
     let profile: { name: string; kind: string } | null = null;
     let template: string | null = null;
-    let recent: RecentPost[] = [];
     let post: PostMeta | null = null;
-    let categories: string[] = [];
-    let tags: string[] = [];
     try {
       const p = getProfile();
       profile = { name: path.basename(p.dir), kind: p.kind };
@@ -96,20 +100,28 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       if (this.repoCache?.dir !== p.dir) {
         this.repoCache = { dir: p.dir, ok: detectRepos([p.dir, workspaceRoot()]).length > 0 };
       }
-      const posts = listPosts(p.postsDir);
-      recent = posts
-        .map((x) => ({ x, m: fs.statSync(x.file).mtimeMs }))
-        .sort((a, b) => b.m - a.m)
-        .slice(0, 5)
-        .map(({ x, m }) => ({
-          file: x.file,
-          title: x.title,
-          draft: x.draft,
-          valid: x.valid,
-          mtime: new Date(m).toISOString().slice(0, 10),
-        }));
-      categories = [...new Set(posts.map((x) => x.category).filter(Boolean))].sort();
-      tags = [...new Set(posts.flatMap((x) => x.tags))].sort();
+      // 文章目录指纹不变 → 复用上次解析结果(切编辑器/标签页走的就是这条轻路径);
+      // 只在文章真的新建/改动/删除后才全量重解析;指纹含目录路径,切档案必然 bust
+      const fp = p.postsDir + '\n' + postsFingerprint(p.postsDir);
+      if (fp !== this.postsFp) {
+        const posts = listPosts(p.postsDir);
+        this.postsDerived = {
+          recent: posts
+            .map((x) => ({ x, m: fs.statSync(x.file).mtimeMs }))
+            .sort((a, b) => b.m - a.m)
+            .slice(0, 5)
+            .map(({ x, m }) => ({
+              file: x.file,
+              title: x.title,
+              draft: x.draft,
+              valid: x.valid,
+              mtime: new Date(m).toISOString().slice(0, 10),
+            })),
+          categories: [...new Set(posts.map((x) => x.category).filter(Boolean))].sort(),
+          tags: [...new Set(posts.flatMap((x) => x.tags))].sort(),
+        };
+        this.postsFp = fp;
+      }
       // 属性面板:活动编辑器里的档案内 md。文本编辑器优先;自定义编辑器/预览
       // 标签页(别的插件打开的 md)从 activeTab 的 uri 兜底识别
       let file = vscode.window.activeTextEditor?.document.fileName;
@@ -129,7 +141,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         }
       }
     } catch {
-      /* 未绑定 */
+      // 未绑定:清空派生数据,别把上一个档案的文章留在控制台
+      this.postsFp = undefined;
+      this.postsDerived = { recent: [], categories: [], tags: [] };
     }
     if (!post) this.activeFile = undefined;
     try {
@@ -146,10 +160,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       profile,
       template,
       servers,
-      recent,
+      recent: this.postsDerived.recent,
       post,
-      categories,
-      tags,
+      categories: this.postsDerived.categories,
+      tags: this.postsDerived.tags,
       git: this.repoCache?.ok ?? false,
     });
   }
@@ -197,6 +211,27 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   listenServers(): vscode.Disposable {
     return onDidChangeServers(() => this.refresh());
+  }
+}
+
+/** 文章目录指纹:文件名 + mtime + size;变了才需要重新解析 frontmatter */
+function postsFingerprint(postsDir: string): string {
+  try {
+    const files = (fs.readdirSync(postsDir, { recursive: true }) as string[]).filter((f) =>
+      f.endsWith('.md'),
+    );
+    return files
+      .map((f) => {
+        try {
+          const st = fs.statSync(path.join(postsDir, f));
+          return `${f}:${st.mtimeMs}:${st.size}`;
+        } catch {
+          return `${f}:?`;
+        }
+      })
+      .join('|');
+  } catch {
+    return '';
   }
 }
 
@@ -390,6 +425,9 @@ const $ = (id) => document.getElementById(id);
 let currentPost = null;
 let lastPostFile = null;
 let pinConsole = false;
+// 脏守卫:属性面板字段被手动改过且未保存时,后台刷新不覆盖正在编辑的内容
+let dirty = false;
+let filling = false;
 
 function applyMode(post) {
   // 「返回控制台」钉住控制台,直到切到另一篇文章
@@ -441,7 +479,12 @@ let allCategories = [];
 const tagCombo = comboMulti($('p_tagsBox'), $('p_tagsIn'), $('p_tagsDrop'), $('p_tags'), () => allTags);
 comboSingle($('p_category'), $('p_categoryDrop'), () => allCategories);
 
+// 任何字段被改动(含标签 chips 写回的 hidden 镜像)即置脏;fillPost 填充期间除外
+$('postView').addEventListener('input', () => { if (!filling) dirty = true; });
+$('postView').addEventListener('change', () => { if (!filling) dirty = true; });
+
 function fillPost(p) {
+  filling = true;
   currentPost = p;
   $('pSlug').textContent = p.slug + '.md';
   $('p_title').value = p.title;
@@ -465,6 +508,7 @@ function fillPost(p) {
   } else {
     sel.value = '';
   }
+  filling = false;
 }
 
 window.addEventListener('message', (e) => {
@@ -500,16 +544,25 @@ window.addEventListener('message', (e) => {
     // 提交入口:档案/工作区都不在 git 仓库里时禁用
     $('publishBtn').disabled = !m.git;
     $('publishBtn').title = m.git ? '把档案的改动提交进 git 仓库' : '档案与工作区都不在 git 仓库中';
-    // 模式切换:有激活文章时填属性面板;换文章解除控制台钉住
-    if ((m.post ? m.post.file : null) !== lastPostFile) {
-      lastPostFile = m.post ? m.post.file : null;
+    // 模式切换:有激活文章时填属性面板;换文章解除控制台钉住并清脏
+    const newFile = m.post ? m.post.file : null;
+    if (newFile !== lastPostFile) {
+      lastPostFile = newFile;
       pinConsole = false;
+      dirty = false;
     }
-    if (m.post) fillPost(m.post);
-    else currentPost = null;
+    if (m.post) {
+      currentPost = m.post;
+      // 脏守卫:正在编辑的表单不被后台刷新覆盖
+      if (!dirty) fillPost(m.post);
+    } else {
+      currentPost = null;
+      dirty = false;
+    }
     applyMode(m.post);
   } else if (m.type === 'aiResult') {
     $('p_desc').value = m.text;
+    dirty = true; // AI 草稿也是未保存的改动,别被刷新冲掉
     $('aiHint').textContent = '已生成(' + (m.via || '') + '),检查后保存';
   } else if (m.type === 'aiBusy' && !m.on) {
     $('aiHint').textContent = '';
@@ -522,6 +575,7 @@ window.addEventListener('message', (e) => {
     sel.appendChild(o);
     sel.value = m.ref;
   } else if (m.type === 'saved') {
+    dirty = false;
     $('aiHint').textContent = '已保存';
     setTimeout(() => { $('aiHint').textContent = ''; }, 1600);
   } else if (m.type === 'error') {

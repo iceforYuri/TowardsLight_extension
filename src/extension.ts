@@ -255,6 +255,18 @@ export function activate(context: vscode.ExtensionContext): void {
     refreshPostsCenter();
     watchPosts();
   };
+  // 刷新防抖:保存一篇文章会同时触发「文档保存」和「文件监视器」,合并成一次;
+  // 切编辑器/标签页只走侧栏(文章列表没变时 refresh 内部走指纹缓存的轻路径)
+  let sbTimer: ReturnType<typeof setTimeout> | undefined;
+  let allTimer: ReturnType<typeof setTimeout> | undefined;
+  const scheduleSidebar = () => {
+    clearTimeout(sbTimer);
+    sbTimer = setTimeout(() => sidebar.refresh(), 120);
+  };
+  const scheduleAll = () => {
+    clearTimeout(allTimer);
+    allTimer = setTimeout(refreshAll, 150);
+  };
   let watcher: vscode.FileSystemWatcher | undefined;
   function watchPosts(): void {
     watcher?.dispose();
@@ -263,19 +275,19 @@ export function activate(context: vscode.ExtensionContext): void {
       watcher = vscode.workspace.createFileSystemWatcher(
         new vscode.RelativePattern(getProfile().postsDir, '**/*.md'),
       );
-      watcher.onDidCreate(refreshAll);
-      watcher.onDidChange(refreshAll);
-      watcher.onDidDelete(refreshAll);
+      watcher.onDidCreate(scheduleAll);
+      watcher.onDidChange(scheduleAll);
+      watcher.onDidDelete(scheduleAll);
     } catch {
       /* 工作区未打开时不挂监听 */
     }
   }
   watchPosts();
-  // 侧栏属性面板跟随活动编辑器/标签页;保存文章后状态刷新
+  // 侧栏属性面板跟随活动编辑器/标签页;保存文章后状态刷新(防抖合并重复触发)
   context.subscriptions.push(
-    vscode.window.onDidChangeActiveTextEditor(() => sidebar.refresh()),
-    vscode.window.tabGroups.onDidChangeTabGroups(() => sidebar.refresh()),
-    vscode.workspace.onDidSaveTextDocument(() => sidebar.refresh()),
+    vscode.window.onDidChangeActiveTextEditor(scheduleSidebar),
+    vscode.window.tabGroups.onDidChangeTabGroups(scheduleSidebar),
+    vscode.workspace.onDidSaveTextDocument(scheduleAll),
   );
 
   context.subscriptions.push(
@@ -315,7 +327,13 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('towardsLight.openLinksFile', guard(() => openFile(getProfile().linksFile))),
   );
 
-  context.subscriptions.push({ dispose: () => watcher?.dispose() });
+  context.subscriptions.push({
+    dispose: () => {
+      watcher?.dispose();
+      clearTimeout(sbTimer);
+      clearTimeout(allTimer);
+    },
+  });
 }
 
 export function deactivate(): void {
