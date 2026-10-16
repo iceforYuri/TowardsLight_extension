@@ -87,6 +87,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     let recent: RecentPost[] = [];
     let post: PostMeta | null = null;
     let categories: string[] = [];
+    let tags: string[] = [];
     try {
       const p = getProfile();
       profile = { name: path.basename(p.dir), kind: p.kind };
@@ -107,6 +108,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           mtime: new Date(m).toISOString().slice(0, 10),
         }));
       categories = [...new Set(posts.map((x) => x.category).filter(Boolean))].sort();
+      tags = [...new Set(posts.flatMap((x) => x.tags))].sort();
       // 属性面板:活动编辑器里的档案内 md。文本编辑器优先;自定义编辑器/预览
       // 标签页(别的插件打开的 md)从 activeTab 的 uri 兜底识别
       let file = vscode.window.activeTextEditor?.document.fileName;
@@ -146,6 +148,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       recent,
       post,
       categories,
+      tags,
       git: this.repoCache?.ok ?? false,
     });
   }
@@ -352,8 +355,9 @@ body.mode-post #consoleView { display: none; }
   <label class="f">分类</label>
   <input type="text" id="p_category" list="p_categoryList">
   <datalist id="p_categoryList"></datalist>
-  <label class="f">标签(逗号分隔)</label>
-  <input type="text" id="p_tags">
+  <label class="f">标签(逗号分隔,有补全)</label>
+  <input type="text" id="p_tags" list="p_tagsList">
+  <datalist id="p_tagsList"></datalist>
   <label class="f">发布日期</label>
   <input type="date" id="p_pubDate">
   <label class="f">封面</label>
@@ -423,6 +427,22 @@ $('p_cover').addEventListener('change', (e) => {
   }
 });
 
+// 标签补全:datalist 的 option 必须是完整输入值,所以按最后一个逗号切出前缀,
+// 候选 = 前缀 + 标签;已入选的和正在输入的 token 不再建议
+let allTags = [];
+function renderTagOptions() {
+  const v = $('p_tags').value;
+  const cut = Math.max(v.lastIndexOf(','), v.lastIndexOf('\\uFF0C'));
+  const prefix = cut >= 0 ? v.slice(0, cut + 1) + ' ' : '';
+  const parts = v.split(/[,\\uFF0C]/).map((s) => s.trim());
+  const cur = parts.pop();
+  $('p_tagsList').innerHTML = allTags
+    .filter((t) => t !== cur && !parts.includes(t))
+    .map((t) => '<option value="' + (prefix + t).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '">')
+    .join('');
+}
+$('p_tags').addEventListener('input', renderTagOptions);
+
 function fillPost(p) {
   currentPost = p;
   $('pSlug').textContent = p.slug + '.md';
@@ -430,6 +450,7 @@ function fillPost(p) {
   $('p_desc').value = p.description;
   $('p_category').value = p.category;
   $('p_tags').value = (p.tags || []).join(', ');
+  renderTagOptions();
   $('p_pubDate').value = p.pubDate || '';
   $('p_draft').checked = !!p.draft;
   $('p_featured').checked = !!p.featured;
@@ -478,6 +499,9 @@ window.addEventListener('message', (e) => {
       el.addEventListener('click', () => vscode.postMessage({ type: 'openFile', file: el.dataset.file })));
     // 分类补全
     $('p_categoryList').innerHTML = (m.categories || []).map((c) => '<option value="' + String(c).replace(/"/g, '&quot;') + '">').join('');
+    // 标签补全池
+    allTags = m.tags || [];
+    renderTagOptions();
     // 提交入口:档案/工作区都不在 git 仓库里时禁用
     $('publishBtn').disabled = !m.git;
     $('publishBtn').title = m.git ? '把档案的改动提交进 git 仓库' : '档案与工作区都不在 git 仓库中';

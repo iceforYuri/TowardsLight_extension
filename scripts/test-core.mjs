@@ -329,6 +329,22 @@ assert.ok(afterText.includes('customField: 别动我'), '未知字段保留');
 assert.ok(afterText.includes('正文内容不要动'), '正文保留');
 ok('updatePostMeta 就地改写 + 删字段 + 保留正文与未知字段');
 
+// updatePostMeta:旧值是块式 YAML 列表(tags: 后跟若干「- 项」)时,覆盖必须清掉续行,
+// 否则悬空列表项让整个 frontmatter 解析失败(valid=false、标题回落成 slug)
+const blockPost = path.join(tmp, 'block-style.md');
+fs.writeFileSync(
+  blockPost,
+  '---\ntitle: 块式列表\ndescription: 测试\npubDate: 2026-10-01\ntags:\n- Agent\n- 记忆系统\n- 上下文工程\ndraft: false\n---\n\n正文\n',
+);
+core.updatePostMeta(blockPost, { tags: ['Agent', '记忆系统'], draft: true });
+const blockAfter = core.parsePost(blockPost);
+assert.equal(blockAfter.valid, true, '覆盖块式列表后 frontmatter 仍应可解析');
+assert.deepEqual(blockAfter.tags, ['Agent', '记忆系统']);
+assert.equal(blockAfter.title, '块式列表', '标题不应回落成 slug');
+assert.equal(blockAfter.draft, true);
+assert.ok(!fs.readFileSync(blockPost, 'utf8').includes('\n- Agent'), '不应残留悬空的列表项');
+ok('updatePostMeta 覆盖块式 YAML 列表:续行清除,不留残骸');
+
 // initProfile:缺什么补什么,已有文件不动
 const profDir = path.join(tmp, 'new-prof');
 fs.mkdirSync(profDir, { recursive: true });

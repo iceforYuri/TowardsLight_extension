@@ -43,7 +43,8 @@ function body(edit: boolean): string {
 <textarea id="description" placeholder="一句话摘要,出现在列表、文章头部和 RSS 里"></textarea>
 
 <label class="f">标签</label>
-<input type="text" id="tags" placeholder="用逗号分隔,如 Astro, 写作">
+<input type="text" id="tags" list="tagsList" placeholder="用逗号分隔,如 Astro, 写作">
+<datalist id="tagsList"></datalist>
 ${
   edit
     ? `
@@ -97,6 +98,7 @@ function script(edit: boolean): string {
     SCRIPT_PREAMBLE +
     `
 const EDIT = ${edit};
+let allTags = [];
 function slugify(t) {
   return t.toLowerCase().normalize('NFKD')
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -131,6 +133,22 @@ window.addEventListener('message', (e) => {
       o.value = c;
       dl.appendChild(o);
     }
+    // 标签补全:datalist 的 option 必须是完整输入值,按最后一个逗号切出前缀,
+    // 候选 = 前缀 + 标签;已入选的和正在输入的 token 不再建议
+    allTags = msg.tags || [];
+    const tagsInput = $('tags');
+    const renderTagOptions = () => {
+      const v = tagsInput.value;
+      const cut = Math.max(v.lastIndexOf(','), v.lastIndexOf('\\uFF0C'));
+      const prefix = cut >= 0 ? v.slice(0, cut + 1) + ' ' : '';
+      const parts = v.split(/[,\\uFF0C]/).map((s) => s.trim());
+      const cur = parts.pop();
+      $('tagsList').innerHTML = allTags
+        .filter((t) => t !== cur && !parts.includes(t))
+        .map((t) => '<option value="' + (prefix + t).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '">')
+        .join('');
+    };
+    tagsInput.addEventListener('input', renderTagOptions);
     const sel = $('cover');
     for (const c of msg.covers) {
       const o = document.createElement('option');
@@ -145,6 +163,7 @@ window.addEventListener('message', (e) => {
       $('category').value = post.category;
       $('description').value = post.description;
       $('tags').value = post.tags.join(', ');
+      renderTagOptions();
       if ($('pubDate')) $('pubDate').value = post.pubDate || '';
       $('draft').checked = post.draft;
       if ($('featured')) $('featured').checked = !!post.featured;
@@ -161,6 +180,7 @@ window.addEventListener('message', (e) => {
     } else {
       restoreState();
     }
+    renderTagOptions();
     bindThumb('cover');
   } else if (msg.type === 'coverPicked') {
     const sel = $('cover');
@@ -296,12 +316,14 @@ export function openPostEditor(refreshPosts: () => void, file?: string): void {
       return;
     }
     if (msg.type === 'ready') {
+      const posts = listPosts(prof.postsDir);
       const fromMeta = readCategories(prof.siteFile).map((c) => c.name);
-      const fromPosts = listPosts(prof.postsDir).map((x) => x.category);
-      const categories = [...new Set([...fromMeta, ...fromPosts])].filter(Boolean);
+      const categories = [...new Set([...fromMeta, ...posts.map((x) => x.category)])].filter(Boolean);
+      const tags = [...new Set(posts.flatMap((x) => x.tags))].sort();
       p.webview.postMessage({
         type: 'init',
         categories,
+        tags,
         covers: listImages(prof.imagesDir),
         post: editFile ? { ...parsePost(editFile), slug: path.basename(editFile, '.md') } : undefined,
       });

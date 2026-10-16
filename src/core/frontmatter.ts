@@ -158,12 +158,20 @@ export function updatePostMeta(file: string, patch: PostMetaPatch): void {
   const lines = m[1].split(/\r?\n/);
   const setLine = (key: string, value: string | null) => {
     const i = lines.findIndex((l) => new RegExp(`^${key}:`).test(l));
-    if (value === null) {
-      if (i >= 0) lines.splice(i, 1);
+    if (i < 0) {
+      if (value !== null) lines.push(`${key}: ${value}`);
       return;
     }
-    if (i >= 0) lines[i] = `${key}: ${value}`;
-    else lines.push(`${key}: ${value}`);
+    // 旧值可能是块式写法(tags: 后跟若干「- 项」、缩进的折叠标量等),
+    // 覆盖/删除时必须把续行一并清掉,否则悬空行会让整个 frontmatter 解析失败
+    let j = i + 1;
+    while (j < lines.length && (/^\s*-\s/.test(lines[j]) || /^\s+\S/.test(lines[j]))) j++;
+    if (value === null) {
+      lines.splice(i, j - i);
+      return;
+    }
+    if (j > i + 1) lines.splice(i + 1, j - i - 1);
+    lines[i] = `${key}: ${value}`;
   };
   if (patch.title !== undefined) setLine('title', yamlScalar(patch.title));
   if (patch.description !== undefined) setLine('description', yamlScalar(patch.description));
