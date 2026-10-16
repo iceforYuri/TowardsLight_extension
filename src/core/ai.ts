@@ -59,3 +59,66 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   baseUrl: '',
   model: '',
 };
+
+/* ── 提交信息生成 ── */
+
+/** 提交信息生成的输入:工作区状态 + diff + 该仓库近期提交标题(作为风格样例) */
+export interface CommitContext {
+  /** git status --porcelain 的行(M/A/D/?? + 路径) */
+  status: string;
+  /** git diff HEAD,可截断 */
+  diff: string;
+  /** git log 最近若干条 subject;仓库风格(语言/type 前缀/长度)由它传递 */
+  recentLog: string[];
+}
+
+export function buildCommitPrompt(ctx: CommitContext): string {
+  const logLines = ctx.recentLog.length
+    ? ctx.recentLog.map((s) => `- ${s}`).join('\n')
+    : '(该仓库还没有提交记录)';
+  return `你是资深开发者,正在为一个 git 仓库写提交信息。
+
+下面是这个仓库最近的提交标题,请延续它们的风格(语言、是否带 type 前缀、详略):
+${logLines}
+
+要求:
+- 只输出提交信息本身,不要解释、引号、代码块围栏或「提交信息:」之类的前缀。
+- 第一行是标题,不超过 72 个字符;确有必要时空一行写正文要点,否则只写标题。
+- 准确概括这次改动,不虚构改动里没有的内容。
+
+工作区状态(git status):
+${ctx.status || '(无)'}
+
+改动内容(git diff,可能已截断):
+${ctx.diff || '(无)'}`;
+}
+
+/** 清洗模型返回的提交信息:去代码围栏/首尾引号/「提交信息:」前缀,保留标题+正文结构 */
+export function normalizeCommitMessage(text: string): string {
+  let s = text.trim();
+  const fence = s.match(/^```[a-z]*\s*\n([\s\S]*?)\n?```$/i);
+  if (fence) s = fence[1].trim();
+  const lines = s.split(/\r?\n/);
+  if (lines[0]) {
+    lines[0] = lines[0]
+      .replace(/^(commit message|提交信息|提交说明)[:：]\s*/i, '')
+      .replace(/^["'「『“”‘’]+|["'」』“”‘’]+$/g, '')
+      .trim();
+  }
+  return lines
+    .map((l) => l.replace(/\s+$/g, ''))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** 本地兜底提交信息:模型都不可用时给一条不失礼的保底,绝不阻塞提交 */
+export function localCommitFallback(files: string[]): string {
+  const n = files.length;
+  if (!n) return 'chore: 更新';
+  const base = (f: string) => f.split('/').pop() ?? f;
+  const posts = files.filter((f) => /(^|\/)posts?\/[^/]+\.mdx?$/i.test(f)).length;
+  if (posts === n) return n === 1 ? `更新 ${base(files[0])}` : `更新 ${n} 篇文章`;
+  if (n === 1) return `更新 ${base(files[0])}`;
+  return `chore: 更新 ${n} 个文件`;
+}

@@ -375,7 +375,6 @@ fs.rmSync(imgTmp, { recursive: true, force: true });
 
 fs.rmSync(tmp, { recursive: true, force: true });
 fs.rmSync(fakeRoot, { recursive: true, force: true });
-console.log(`\n全部通过:${passed} 项`);
 
 // ── AI 摘要纯函数 ──
 const mdAi = `---
@@ -397,3 +396,28 @@ assert.equal(core.normalizeSummary('短'), '短');
 assert.ok(core.localFallback(mdAi).startsWith('这是第一段正文'), '本地回退取首段');
 assert.ok(core.buildPrompt('正文').includes('正文'), '提示词含正文');
 ok('AI 摘要:正文清洗/归一化/本地回退/提示词');
+
+// ── 提交信息纯函数 ──
+const commitPrompt = core.buildCommitPrompt({
+  status: ' M posts/a.md',
+  diff: 'diff --git a/posts/a.md …',
+  recentLog: ['feat: 建站', 'fix: 修图'],
+});
+assert.ok(commitPrompt.includes('posts/a.md'), '提交提示词含工作区状态');
+assert.ok(commitPrompt.includes('feat: 建站'), '提交提示词含仓库风格样例');
+assert.ok(core.buildCommitPrompt({ status: '', diff: '', recentLog: [] }).includes('还没有提交记录'), '空仓库有兜底文案');
+assert.equal(
+  core.normalizeCommitMessage('```\nfeat: 测试提交\n\n正文要点\n```'),
+  'feat: 测试提交\n\n正文要点',
+  '去代码围栏并保留多行结构',
+);
+assert.equal(core.normalizeCommitMessage('提交信息:fix: 修 bug'), 'fix: 修 bug', '去中文前缀');
+assert.equal(core.normalizeCommitMessage('  "docs: 加文档"  '), 'docs: 加文档', '去首尾引号空白');
+assert.equal(core.normalizeCommitMessage('a\n\n\n\nb'), 'a\n\nb', '收敛连续空行');
+assert.equal(core.localCommitFallback(['posts/a.md', 'posts/b.md']), '更新 2 篇文章');
+assert.equal(core.localCommitFallback(['posts/a.md']), '更新 a.md');
+assert.equal(core.localCommitFallback(['site.ts', 'links.ts']), 'chore: 更新 2 个文件');
+assert.equal(core.localCommitFallback([]), 'chore: 更新');
+ok('提交信息:提示词/归一化/本地兜底');
+
+console.log(`\n全部通过:${passed} 项`);

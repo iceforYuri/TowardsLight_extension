@@ -1,15 +1,20 @@
 /**
- * 摘要生成(host 侧,依赖 vscode):
+ * AI 能力(host 侧,依赖 vscode):
  * 默认走 VS Code 语言模型(借 Copilot 登录态,零配置);
  * 设置里可切到自定义 OpenAI 兼容端点(baseUrl + model + key,key 存 SecretStorage);
- * 两者都不可用/失败时回退到本地提取(首段截取)。
+ * 两者都不可用/失败时回退到本地规则,只降级不弹错。
+ * 现有两个能力:文章摘要(generateSummary)、git 提交信息(generateCommitMessage)。
  */
 import * as vscode from 'vscode';
 import {
   AiSettings,
+  buildCommitPrompt,
   buildPrompt,
+  CommitContext,
   DEFAULT_AI_SETTINGS,
+  localCommitFallback,
   localFallback,
+  normalizeCommitMessage,
   normalizeSummary,
   prepareSource,
 } from './core/ai';
@@ -45,40 +50,42 @@ export async function hasApiKey(): Promise<boolean> {
   return !!(await secrets?.get(SECRET_KEY));
 }
 
-export interface SummaryResult {
+export interface AiResult {
   text: string;
   /** copilot / openai / local */
   via: 'copilot' | 'openai' | 'local';
   detail: string;
 }
 
-async function viaCopilot(source: string): Promise<SummaryResult | null> {
+interface ChatReply {
+  text: string;
+  via: 'copilot' | 'openai';
+  detail: string;
+}
+
+async function viaCopilot(prompt: string, justification: string): Promise<ChatReply | null> {
   try {
     const models = await vscode.lm.selectChatModels({ vendor: 'copilot' });
     const model = models[0];
     if (!model) return null;
-    let src = source;
-    let prompt = buildPrompt(src);
+    let p = prompt;
     const limit = Math.max(256, model.maxInputTokens - 512);
-    while ((await model.countTokens(prompt)) > limit && src.length > 1000) {
-      src = src.slice(0, Math.floor(src.length * 0.7));
-      prompt = buildPrompt(src);
+    // 超长收缩:提示词把正文/diff 放在末尾,截尾保头
+    while ((await model.countTokens(p)) > limit && p.length > 2000) {
+      p = p.slice(0, Math.floor(p.length * 0.7));
     }
-    const res = await model.sendRequest(
-      [vscode.LanguageModelChatMessage.User(prompt)],
-      { justification: '根据当前文章正文生成 Frontmatter 摘要' },
-    );
+    const res = await model.sendRequest([vscode.LanguageModelChatMessage.User(p)], {
+      justification,
+    });
     let out = '';
     for await (const frag of res.text) out += frag;
-    const text = normalizeSummary(out);
-    if (text.length < 10) return null;
-    return { text, via: 'copilot', detail: model.name };
+    return { text: out, via: 'copilot', detail: model.name };
   } catch {
     return null;
   }
 }
 
-async function viaOpenAi(source: string, settings: AiSettings): Promise<SummaryResult | null> {
+async function viaOpenAi(prompt: string, settings: AiSettings): Promise<ChatReply | null> {
   const key = await secrets?.get(SECRET_KEY);
   if (!settings.baseUrl || !settings.model || !key) return null;
   try {
@@ -89,30 +96,45 @@ async function viaOpenAi(source: string, settings: AiSettings): Promise<SummaryR
       headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
       body: JSON.stringify({
         model: settings.model,
-        messages: [{ role: 'user', content: buildPrompt(source.slice(0, 12000)) }],
+        messages: [{ role: 'user', content: prompt.slice(0, 16000) }],
         temperature: 0.4,
       }),
       signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    const text = normalizeSummary(data.choices?.[0]?.message?.content ?? '');
-    if (text.length < 10) return null;
-    return { text, via: 'openai', detail: settings.model };
+    return { text: data.choices?.[0]?.message?.content ?? '', via: 'openai', detail: settings.model };
   } catch {
     return null;
   }
 }
 
-/** 生成文章摘要:按设置走 copilot 或自定义端点,失败回退本地提取 */
-export async function generateSummary(markdown: string): Promise<SummaryResult> {
+/** 按设置走 copilot 或自定义端点;不可用/失败返回 null,由调用方决定本地回退 */
+async function chat(prompt: string, justification: string): Promise<ChatReply | null> {
+  const settings = getAiSettings();
+  return settings.provider === 'openai' ? viaOpenAi(prompt, settings) : viaCopilot(prompt, justification);
+}
+
+/** 生成文章摘要:模型优先,失败回退本地提取(首段截取) */
+export async function generateSummary(markdown: string): Promise<AiResult> {
   const source = prepareSource(markdown);
   if (!source) throw new Error('正文里没有可用于生成摘要的文字');
-  const settings = getAiSettings();
-  const result =
-    settings.provider === 'openai' ? await viaOpenAi(source, settings) : await viaCopilot(source);
-  if (result) return result;
+  const r = await chat(buildPrompt(source), '根据当前文章正文生成 Frontmatter 摘要');
+  if (r) {
+    const text = normalizeSummary(r.text);
+    if (text.length >= 10) return { text, via: r.via, detail: r.detail };
+  }
   const text = localFallback(markdown);
   if (!text) throw new Error('正文里没有可用于生成摘要的文字');
   return { text, via: 'local', detail: '本地提取(模型不可用)' };
+}
+
+/** 生成提交信息:工作区状态 + diff + 该仓库历史风格;失败回退本地规则,绝不阻塞提交 */
+export async function generateCommitMessage(ctx: CommitContext & { files: string[] }): Promise<AiResult> {
+  const r = await chat(buildCommitPrompt(ctx), '根据工作区改动生成 git 提交信息');
+  if (r) {
+    const text = normalizeCommitMessage(r.text);
+    if (text) return { text, via: r.via, detail: r.detail };
+  }
+  return { text: localCommitFallback(ctx.files), via: 'local', detail: '本地规则(模型不可用)' };
 }

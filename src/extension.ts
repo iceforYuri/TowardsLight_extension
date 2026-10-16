@@ -12,6 +12,7 @@ import { openCategoryForm } from './webviews/category';
 import { openLinkForm } from './webviews/link';
 import { openNewPostForm } from './webviews/newPost';
 import { openPostsCenter, refreshPostsCenter } from './webviews/postsCenter';
+import { openPublish } from './webviews/publish';
 import { openSiteConfigForm } from './webviews/siteConfig';
 
 async function addIconCommand(context: vscode.ExtensionContext): Promise<void> {
@@ -292,6 +293,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (rec) stopServer(rec);
     }),
     vscode.commands.registerCommand('towardsLight.openPostsCenter', guard(() => openPostsCenter())),
+    vscode.commands.registerCommand('towardsLight.publish', guard(() => openPublish())),
     vscode.commands.registerCommand('towardsLight.newPost', guard(() => openNewPostForm(() => refreshAll()))),
     vscode.commands.registerCommand(
       'towardsLight.openPostPreview',

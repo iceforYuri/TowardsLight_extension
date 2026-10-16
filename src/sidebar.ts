@@ -5,8 +5,9 @@ import * as vscode from 'vscode';
 import { listPosts, parsePost, PostMeta, updatePostMeta } from './core';
 import { articleImageDir, articleImageRef, copyImageIn } from './core/images';
 import { generateSummary } from './ai';
+import { detectRepos } from './git';
 import { listServers, onDidChangeServers } from './preview';
-import { getProfile, pickImages, getTemplateDir } from './util';
+import { getProfile, pickImages, getTemplateDir, workspaceRoot } from './util';
 import { openPostEditor } from './webviews/newPost';
 
 interface RecentPost {
@@ -26,6 +27,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
   /** 当前属性面板绑定的文章(用于保存/AI/选图) */
   private activeFile: string | undefined;
+  /** git 可用性按档案目录缓存,不每次 refresh 都跑 git 探测 */
+  private repoCache: { dir: string; ok: boolean } | undefined;
 
   resolveWebviewView(view: vscode.WebviewView): void {
     this.view = view;
@@ -48,6 +51,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           links: 'towardsLight.addLink',
           site: 'towardsLight.editSiteConfig',
           newPost: 'towardsLight.newPost',
+          publish: 'towardsLight.publish',
           openSettings: 'towardsLight.openSettings',
         }[msg.type as string];
         if (cmd) {
@@ -86,6 +90,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     try {
       const p = getProfile();
       profile = { name: path.basename(p.dir), kind: p.kind };
+      // 「提交更改」入口的可用性:档案或工作区任一侧在 git 仓库里即可
+      if (this.repoCache?.dir !== p.dir) {
+        this.repoCache = { dir: p.dir, ok: detectRepos([p.dir, workspaceRoot()]).length > 0 };
+      }
       const posts = listPosts(p.postsDir);
       recent = posts
         .map((x) => ({ x, m: fs.statSync(x.file).mtimeMs }))
@@ -138,6 +146,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       recent,
       post,
       categories,
+      git: this.repoCache?.ok ?? false,
     });
   }
 
@@ -252,6 +261,8 @@ body { margin: 0; padding: 10px 10px 24px; color: var(--fg); background: var(--b
 .ghost { width: 100%; margin-top: 6px; padding: 7px; border: 1px dashed var(--line); border-radius: 8px;
   background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
 .ghost:hover { color: var(--accent); border-color: var(--accent); }
+.ghost:disabled { opacity: 0.45; cursor: default; }
+.ghost:disabled:hover { color: var(--muted); border-color: var(--line); }
 
 /* 最近文章 */
 .recent .row { padding: 5px 10px; }
@@ -323,6 +334,7 @@ body.mode-post #consoleView { display: none; }
 
   <div class="sec">
     <button class="play" data-m="newPost">＋ 新建文章</button>
+    <button class="ghost" data-m="publish" id="publishBtn">提交更改</button>
     <button class="ghost" data-m="openSettings">设置</button>
   </div>
 </div>
@@ -466,6 +478,9 @@ window.addEventListener('message', (e) => {
       el.addEventListener('click', () => vscode.postMessage({ type: 'openFile', file: el.dataset.file })));
     // 分类补全
     $('p_categoryList').innerHTML = (m.categories || []).map((c) => '<option value="' + String(c).replace(/"/g, '&quot;') + '">').join('');
+    // 提交入口:档案/工作区都不在 git 仓库里时禁用
+    $('publishBtn').disabled = !m.git;
+    $('publishBtn').title = m.git ? '把档案的改动提交进 git 仓库' : '档案与工作区都不在 git 仓库中';
     // 模式切换:有激活文章时填属性面板;换文章解除控制台钉住
     if ((m.post ? m.post.file : null) !== lastPostFile) {
       lastPostFile = m.post ? m.post.file : null;
