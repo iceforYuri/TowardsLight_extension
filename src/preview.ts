@@ -119,28 +119,47 @@ const STATE_KEY = 'towardsLight.runningServers';
 
 interface PersistedServer {
   pid: number;
+  /** 拉起它的扩展宿主进程 pid:同一工作区多开窗口共用账本,
+      回收时只动「宿主已死」的条目,别杀别的窗口正在用的 server */
+  hostPid?: number;
   port: number;
   templateDir: string;
   profileDir: string;
 }
 
+/** pid 是否存活(EPERM 算活着:存在但无权操作,常见于权限更高的进程) */
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
 function persistServers(): void {
   try {
-    const list: PersistedServer[] = servers
+    // 合并账本:保留其他活着的窗口的条目,再覆写本窗口自己的
+    const others = stateStore()
+      .get<PersistedServer[]>(STATE_KEY, [])
+      .filter((e) => e.hostPid && e.hostPid !== process.pid && pidAlive(e.hostPid));
+    const mine: PersistedServer[] = servers
       .filter((s) => s.proc.pid)
       .map((s) => ({
         pid: s.proc.pid as number,
+        hostPid: process.pid,
         port: s.port,
         templateDir: s.templateDir,
         profileDir: s.profileDir,
       }));
-    void stateStore().update(STATE_KEY, list);
+    void stateStore().update(STATE_KEY, [...others, ...mine]);
   } catch {
     /* 未激活时跳过 */
   }
 }
 
-/** activate 时调用:上次会话拉起的 server 已无人记账,按 PID 逐个回收 */
+/** activate 时调用:回收「宿主已死」的遗留 server;宿主还活着的条目属于
+    同工作区的其他窗口,原样保留在账本里、绝不动它的进程 */
 export function reapOrphanServers(): void {
   let list: PersistedServer[];
   try {
@@ -148,15 +167,17 @@ export function reapOrphanServers(): void {
   } catch {
     return;
   }
+  const survivors: PersistedServer[] = [];
   for (const rec of list) {
-    let alive = false;
-    try {
-      process.kill(rec.pid, 0);
-      alive = true;
-    } catch {
-      /* 进程已不在 */
+    // 旧版本账本没有 hostPid,按宿主已死处理(维持原有清理行为)
+    if (rec.hostPid && pidAlive(rec.hostPid)) {
+      survivors.push(rec);
+      continue;
     }
-    if (!alive) continue;
+    if (!pidAlive(rec.pid)) continue;
+    previewLog().appendLine(
+      `[${rec.port}] 回收遗留的预览 server(pid ${rec.pid},宿主 ${rec.hostPid ?? '未知'} 已退出)`,
+    );
     if (process.platform === 'win32') {
       spawn('taskkill', ['/pid', String(rec.pid), '/t', '/f'], { stdio: 'ignore' });
     } else {
@@ -167,7 +188,7 @@ export function reapOrphanServers(): void {
       }
     }
   }
-  void stateStore().update(STATE_KEY, []);
+  void stateStore().update(STATE_KEY, survivors);
 }
 
 export function stopServer(rec: ServerRec): void {
@@ -321,9 +342,12 @@ export async function openPostPreview(file: string | undefined): Promise<void> {
   openPanel(`post:${slug}`, `预览:${slug}`, rec.port, `/posts/${slug}`);
 }
 
-/** 扩展停用时回收所有自己拉起的 server */
+/** 扩展停用时回收所有自己拉起的 server(Reload Window 会走到这里) */
 export function disposeServer(): void {
-  for (const rec of [...servers]) kill(rec);
+  for (const rec of [...servers]) {
+    previewLog().appendLine(`[${rec.port}] 扩展停用(Reload/关闭窗口),回收 server(pid ${rec.proc.pid})`);
+    kill(rec);
+  }
   servers.length = 0;
   persistServers();
   emitter.fire();
