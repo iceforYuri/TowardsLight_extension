@@ -2,8 +2,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import * as vscode from 'vscode';
-import { listPosts, parsePost, PostMeta, updatePostMeta } from './core';
-import { articleImageDir, articleImageRef, copyImageIn } from './core/images';
+import { listPosts, parsePost, PostMeta, readCategories, updatePostMeta } from './core';
+import { articleImageDir, articleImageDirs, articleImageRef, copyImageIn } from './core/images';
 import { generateSummary } from './ai';
 import { detectRepos } from './git';
 import { listServers, onDidChangeServers } from './preview';
@@ -79,8 +79,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           // 文章级提交:打开提交面板,预选当前文章与它的图片目录
           const file = this.activeFile;
           const p = getProfile();
-          const slug = path.basename(file, '.md');
-          openPublish({ file, imageDir: articleImageDir(p.postsDir, slug) });
+          const meta = parsePost(file);
+          openPublish({ file, imageDirs: articleImageDirs(p.postsDir, file, meta.cover) });
         } else if (msg.type === 'aiSummary' && this.activeFile) {
           await this.handleAiSummary();
         } else if (msg.type === 'pickCover' && this.activeFile) {

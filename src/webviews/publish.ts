@@ -77,7 +77,7 @@ function script(): string {
 let repos = [];
 let currentRoot = '';
 let files = [];
-// 文章级提交的预选范围:{ file: 文章的仓库相对路径, dir: 图片目录前缀 };空为全局面板
+// 文章级提交的预选范围:{ file: 文章的仓库相对路径, dirs: 实际使用的图片目录 }; 空为全局面板
 let currentFocus = null;
 
 function esc(s) {
@@ -93,8 +93,9 @@ function chipTitle(xy) {
   return s === 'A' ? '新增' : s === 'D' ? '删除' : '修改';
 }
 function isFocused(f) {
-  if (!currentFocus) return true; // 无预选范围时默认全选
-  return f.file === currentFocus.file || (currentFocus.dir && f.file.startsWith(currentFocus.dir));
+  if (!currentFocus) return true;
+  const dirs = currentFocus.dirs || (currentFocus.dir ? [currentFocus.dir] : []);
+  return f.file === currentFocus.file || dirs.some((dir) => f.file.startsWith(dir));
 }
 function renderRepos() {
   const sel = $('repoSel');
@@ -242,7 +243,7 @@ let openedProfile: ProfileInfo | undefined;
 /** 文章级提交的预选范围(当前文章 + 它的图片目录);从控制台进入为空 */
 export interface PublishFocus {
   file: string;
-  imageDir: string;
+  imageDirs: string[];
 }
 let pendingFocus: PublishFocus | undefined;
 
@@ -348,11 +349,14 @@ function sendStatus(p: vscode.WebviewPanel, root: string): void {
   if (!root) return;
   // 文章级提交:把文章与其图片目录换算成该仓库的相对路径,交给面板做预选;
   // 目标仓库不包含这些路径时(用户切到了别的仓库)自然落空,退回全选
-  let focus: { file: string | null; dir: string | null } | null = null;
+  let focus: { file: string | null; dirs: string[] } | null = null;
   if (pendingFocus) {
     const relFile = relInRepo(root, pendingFocus.file);
-    const relDir = relInRepo(root, pendingFocus.imageDir);
-    if (relFile || relDir) focus = { file: relFile, dir: relDir ? relDir + '/' : null };
+    const relDirs = pendingFocus.imageDirs
+      .map((dir) => relInRepo(root, dir))
+      .filter((dir): dir is string => !!dir)
+      .map((dir) => dir + '/');
+    if (relFile || relDirs.length) focus = { file: relFile, dirs: relDirs };
   }
   p.webview.postMessage({ type: 'status', root, files: statusFiles(root), focus });
 }

@@ -386,6 +386,15 @@ assert.equal(fs.readFileSync(src, 'utf8'), 'fake-jpg', '源文件应保留(复�
 assert.equal(core.articleImageRef('my-post', 'photo-2.jpg'), 'image/my-post/photo-2.jpg');
 assert.equal(core.siteImageRef('a.png'), '/images/a.png');
 assert.equal(core.articleImageDir('/x/posts', 'my-post'), path.join('/x/posts', 'image', 'my-post'));
+const assetPosts = path.join(imgTmp, 'asset-posts');
+const assetArticle = path.join(assetPosts, 'graphpfn-reading-notes.md');
+const customAssetDir = path.join(assetPosts, 'image', 'graphpfn');
+fs.mkdirSync(customAssetDir, { recursive: true });
+fs.writeFileSync(path.join(customAssetDir, 'figure.svg'), '<svg/>');
+fs.writeFileSync(assetArticle, '---\ntitle: GraphPFN\n---\n\n![figure](./image/graphpfn/figure.svg)\n');
+const articleDirs = core.articleImageDirs(assetPosts, assetArticle);
+assert.ok(articleDirs.includes(customAssetDir), 'articleImageDirs follows the referenced image directory');
+assert.ok(articleDirs.includes(core.articleImageDir(assetPosts, 'graphpfn-reading-notes')), 'articleImageDirs keeps the default image directory fallback');
 ok('copyImageIn 撞名加后缀、源文件保留、引用路径正确');
 fs.rmSync(imgTmp, { recursive: true, force: true });
 
