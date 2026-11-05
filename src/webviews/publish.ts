@@ -61,7 +61,7 @@ function body(): string {
 <p class="sub">AI 生成只是草稿,确认后才会提交;推送默认关闭,由你显式勾选。</p>
 ${cardHtml('repo', '01', '仓库', '自动检测档案所属仓库,可切换', repo)}
 ${cardHtml('files', '02', '变更文件', '默认全选,取消勾选的文件不进这次提交', files)}
-${cardHtml('message', '03', '提交信息', 'AI 风格跟随该仓库的最近提交', message)}
+${cardHtml('message-card', '03', '提交信息', 'AI 风格跟随该仓库的最近提交', message)}
 <div class="error" id="error"></div>
 <div class="actions">
   <button class="primary" id="submit">提交</button>
@@ -173,9 +173,14 @@ $('repoSel').addEventListener('change', () => {
 });
 $('aiBtn').addEventListener('click', () => {
   if (!currentRoot) return;
+  const picked = checkedFiles();
+  if (!picked.length) {
+    $('aiHint').textContent = '先勾选要提交的文件';
+    return;
+  }
   $('aiBtn').disabled = true;
   $('aiHint').textContent = '生成中…';
-  vscode.postMessage({ type: 'ai', root: currentRoot });
+  vscode.postMessage({ type: 'ai', root: currentRoot, files: picked });
 });
 $('submit').addEventListener('click', () => {
   const picked = checkedFiles();
@@ -281,12 +286,18 @@ export function openPublish(focus?: PublishFocus): void {
         sendStatus(panel, String(msg.root ?? ''));
       } else if (msg.type === 'ai') {
         const root = String(msg.root ?? '');
-        const changed = statusFiles(root);
+        const requested = Array.isArray(msg.files) ? msg.files.map(String) : [];
+        const changedAll = statusFiles(root);
+        const changed = requested.length
+          ? changedAll.filter((f) => requested.includes(f.file))
+          : changedAll;
+        const files = changed.map((f) => f.file);
+        if (!files.length) throw new Error('选中文件已不在变更列表里，请刷新后重试');
         const res = await generateCommitMessage({
           status: changed.map((f) => `${f.xy} ${f.file}`).join('\n'),
-          diff: diffForPrompt(root),
+          diff: diffForPrompt(root, files),
           recentLog: recentLog(root),
-          files: changed.map((f) => f.file),
+          files,
         });
         panel.webview.postMessage({ type: 'aiDone', text: res.text, via: res.detail });
       } else if (msg.type === 'submit') {

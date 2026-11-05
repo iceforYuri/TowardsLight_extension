@@ -4,6 +4,7 @@
  * 所有命令带超时并禁用凭据交互(GIT_TERMINAL_PROMPT=0)——要密码就失败,绝不挂死。
  */
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 
 const DEFAULT_TIMEOUT = 15_000;
@@ -92,15 +93,49 @@ export function statusFiles(root: string): ChangedFile[] {
   return out;
 }
 
-/** 喂给模型的 diff:相对 HEAD(含未暂存),截断到 max 字符;空仓库(无 HEAD)退化到已暂存区 */
-export function diffForPrompt(root: string, max = 8000): string {
-  let res = runGit(root, ['diff', 'HEAD', '--']);
-  if (!res.ok) res = runGit(root, ['diff', '--cached', '--']);
-  let diff = res.ok ? res.stdout.trim() : '';
-  if (diff.length > max) diff = diff.slice(0, max) + '\n…(diff 过长,已截断)';
-  return diff;
-}
+const PROMPT_TEXT_EXTENSIONS = new Set([
+  '.md', '.mdx', '.txt', '.ts', '.tsx', '.js', '.mjs', '.cjs', '.json', '.jsonc',
+  '.css', '.scss', '.astro', '.yml', '.yaml', '.toml', '.html', '.svg',
+]);
 
+/** 给模型的改动上下文：只取本次选中的文件；未跟踪文本文件直接补正文，避免只剩文件名。 */
+export function diffForPrompt(root: string, files?: string[], max = 8000): string {
+  const selected = files?.map((f) => f.replace(/\\/g, '/'));
+  const wanted = selected?.length ? new Set(selected) : null;
+  const pathArgs = selected?.length ? selected : [];
+  let res = runGit(root, ['diff', 'HEAD', '--', ...pathArgs]);
+  if (!res.ok) res = runGit(root, ['diff', '--cached', '--', ...pathArgs]);
+  let tracked = res.ok ? res.stdout.trim() : '';
+
+  const untracked = statusFiles(root).filter(
+    (f) => f.xy === '??' && (!wanted || wanted.has(f.file)),
+  );
+  const excerpts: string[] = [];
+  const textFiles = untracked.filter((f) => PROMPT_TEXT_EXTENSIONS.has(path.extname(f.file).toLowerCase()));
+  const perFile = textFiles.length ? Math.max(800, Math.floor((max * 0.45) / textFiles.length)) : 0;
+  for (const f of textFiles) {
+    const full = path.resolve(root, f.file);
+    const rel = path.relative(root, full);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) continue;
+    try {
+      const stat = fs.statSync(full);
+      if (!stat.isFile() || stat.size > 512 * 1024) continue;
+      let content = fs.readFileSync(full, 'utf8').replace(/\r\n/g, '\n').trim();
+      if (!content) continue;
+      if (content.length > perFile) content = content.slice(0, perFile) + '\n…(新增文件内容已截断)';
+      excerpts.push(`--- 新增文件 ${f.file} ---\n${content}`);
+    } catch {
+      /* 文件在读取前后消失时忽略，status 仍会记录路径 */
+    }
+  }
+
+  if (excerpts.length) {
+    const trackedBudget = Math.max(1200, Math.floor(max * 0.55));
+    if (tracked.length > trackedBudget) tracked = tracked.slice(0, trackedBudget) + '\n…(diff 已截断)';
+    tracked = [tracked, ...excerpts].filter(Boolean).join('\n\n');
+  }
+  return tracked.length > max ? tracked.slice(0, max) + '\n…(改动内容已截断)' : tracked;
+}
 /** 最近 n 条提交标题,作为 AI 生成提交信息的风格样例;空仓库返回 [] */
 export function recentLog(root: string, n = 10): string[] {
   const res = runGit(root, ['log', `-${n}`, '--pretty=%s']);

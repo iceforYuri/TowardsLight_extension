@@ -421,6 +421,14 @@ const commitPrompt = core.buildCommitPrompt({
 });
 assert.ok(commitPrompt.includes('posts/a.md'), '提交提示词含工作区状态');
 assert.ok(commitPrompt.includes('feat: 建站'), '提交提示词含仓库风格样例');
+const scopedCommitPrompt = core.buildCommitPrompt({
+  status: '?? posts/memgpt-reading-notes.md',
+  diff: '--- 新增文件 posts/memgpt-reading-notes.md ---\nMemGPT memory hierarchy',
+  recentLog: ['update: 更新 GraMMA 读懂笔记'],
+  files: ['posts/memgpt-reading-notes.md'],
+});
+assert.ok(scopedCommitPrompt.includes('posts/memgpt-reading-notes.md'), '提交提示词含本次选中文件');
+assert.ok(scopedCommitPrompt.includes('不得复用其中的项目名'), '最近提交只作格式样例,不得借主题');
 assert.ok(core.buildCommitPrompt({ status: '', diff: '', recentLog: [] }).includes('还没有提交记录'), '空仓库有兜底文案');
 assert.equal(
   core.normalizeCommitMessage('```\nfeat: 测试提交\n\n正文要点\n```'),
