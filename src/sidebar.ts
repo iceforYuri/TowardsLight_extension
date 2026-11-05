@@ -109,9 +109,20 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       }
       // 文章目录指纹不变 → 复用上次解析结果(切编辑器/标签页走的就是这条轻路径);
       // 只在文章真的新建/改动/删除后才全量重解析;指纹含目录路径,切档案必然 bust
-      const fp = p.postsDir + '\n' + postsFingerprint(p.postsDir);
+      const siteStat = fs.statSync(p.siteFile);
+      const fp =
+        p.postsDir +
+        '\n' +
+        postsFingerprint(p.postsDir) +
+        `\n${p.siteFile}:${siteStat.mtimeMs}:${siteStat.size}`;
       if (fp !== this.postsFp) {
         const posts = listPosts(p.postsDir);
+        let configuredCategories: string[] = [];
+        try {
+          configuredCategories = readCategories(p.siteFile).map((c) => c.name);
+        } catch {
+          /* Older profiles may not define categoryMeta. */
+        }
         this.postsDerived = {
           recent: posts
             .map((x) => ({ x, m: fs.statSync(x.file).mtimeMs }))
@@ -124,7 +135,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
               valid: x.valid,
               mtime: new Date(m).toISOString().slice(0, 10),
             })),
-          categories: [...new Set(posts.map((x) => x.category).filter(Boolean))].sort(),
+          categories: [
+            ...new Set([
+              ...configuredCategories,
+              ...posts.map((x) => x.category),
+            ]),
+          ]
+            .filter(Boolean)
+            .sort(),
           tags: [...new Set(posts.flatMap((x) => x.tags))].sort(),
         };
         this.postsFp = fp;

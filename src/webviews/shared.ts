@@ -592,8 +592,8 @@ function comboSingle(input, drop, getOptions) {
   function updateHot() {
     drop.querySelectorAll('.combo-item').forEach((el, i) => el.classList.toggle('hot', i === hot));
   }
-  function render() {
-    const q = input.value.trim();
+  function render(showAll = false) {
+    const q = showAll ? '' : input.value.trim();
     const all = getOptions();
     list = all.filter((t) => !q || t.toLowerCase().indexOf(q.toLowerCase()) >= 0).slice(0, 60)
       .map((t) => ({ value: t, isNew: false }));
@@ -609,7 +609,7 @@ function comboSingle(input, drop, getOptions) {
     });
     updateHot();
   }
-  function open() { render(); wrap.classList.add('open'); }
+  function open(showAll = false) { render(showAll); wrap.classList.add('open'); }
   function pick(i) {
     const o = list[i];
     if (!o) return;
@@ -618,13 +618,13 @@ function comboSingle(input, drop, getOptions) {
     close();
   }
   input.setAttribute('autocomplete', 'off');
-  input.addEventListener('focus', open);
+  input.addEventListener('focus', () => open(true));
   input.addEventListener('input', (e) => { if (e.isTrusted) { isOpen() ? render() : open(); } });
   input.addEventListener('blur', () => setTimeout(close, 100));
   input.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
-      if (!isOpen()) return open();
+      if (!isOpen()) return open(true);
       if (!list.length) return;
       hot = (hot + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length;
       updateHot();
