@@ -32,8 +32,8 @@ export const site = {
   ],
   socialLinks: [
     { label: 'GitHub', href: 'https://github.com', icon: 'github' },
+    { label: '模板参考', href: 'https://github.com/iceforYuri/TowardsLight', icon: 'database' },
     { label: 'RSS', href: '/rss.xml', icon: 'rss' },
-    { label: 'Email', href: 'mailto:hi@example.com', icon: 'mail' },
   ],
   homeHero: {
     greeting: '我的博客',

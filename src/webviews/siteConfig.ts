@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { readSiteConfig, updateSiteConfig } from '../core';
+import { readIcons, readSiteConfig, updateSiteConfig } from '../core';
 import { copyImageIn, siteImageRef } from '../core/images';
 import { getProfile, assertProfileUnchanged, pickImages, resolveImageUri } from '../util';
 import { cardHtml, imageRowHtml, pageShell, SCRIPT_PREAMBLE } from './shared';
@@ -72,6 +72,12 @@ ${imageRowHtml('avatar', '/images/avatar.svg')}
 <label class="f">状态描述</label>
 <input type="text" id="statusText" placeholder="如:正在把这个博客迁到 Astro">`;
 
+  const navActions = `
+<div class="navlink-list" id="navActions"></div>
+<input type="hidden" id="socialLinksJson">
+<button class="small" id="navAdd" type="button">＋ 添加导航按钮</button>
+<div class="hint">写入 site.ts 的 socialLinks:顶部导航功能区显示这些入口;桌面端隐藏 RSS,移动端与页脚显示全部。图标名需要存在于 Icon.astro。</div>`;
+
   const hero = `
 <label class="f">背景图</label>
 ${imageRowHtml('heroBackground', '留空则用主题背景色')}
@@ -98,6 +104,20 @@ ${imageRowHtml(`bd_${key}`, '留空则无背景图')}`,
   ).join('');
 
   return `
+<style>
+.navlink-list { display: grid; gap: 7px; margin-bottom: 10px; }
+.navlink-row { display: grid; grid-template-columns: 34px minmax(90px, 0.85fr) minmax(170px, 1.45fr) minmax(120px, 0.7fr) auto; gap: 7px; align-items: center; }
+.navlink-ico { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 8px; display: grid; place-items: center; color: var(--muted); background: var(--input-bg); }
+.navlink-ico svg { width: 16px; height: 16px; }
+.navlink-ops { display: flex; gap: 4px; }
+.navlink-ops .small { padding: 2px 7px; }
+.navlink-empty { color: var(--faint); border: 1px dashed var(--line); border-radius: 9px; padding: 13px; text-align: center; }
+@media (max-width: 760px) {
+  .navlink-row { grid-template-columns: 34px 1fr auto; }
+  .navlink-row input, .navlink-row select { grid-column: 2; }
+  .navlink-ops { grid-row: 1; grid-column: 3; }
+}
+</style>
 <div class="kicker">Towards Light · Studio</div>
 <h1>站点信息</h1>
 <p class="sub">写回当前档案的 site.ts,保留注释与格式;dev server 会热更新,保存后即可在预览里看到效果。</p>
@@ -107,17 +127,19 @@ ${imageRowHtml(`bd_${key}`, '留空则无背景图')}`,
   <a href="#c1"><span class="ti">01</span>基本</a>
   <a href="#c2"><span class="ti">02</span>头像</a>
   <a href="#c3"><span class="ti">03</span>当前状态</a>
-  <a href="#c4"><span class="ti">04</span>首页 Hero</a>
-  <a href="#c5"><span class="ti">05</span>页面背景</a>
-  <a href="#c6"><span class="ti">06</span>页面文案</a>
+  <a href="#c4"><span class="ti">04</span>导航按钮</a>
+  <a href="#c5"><span class="ti">05</span>首页 Hero</a>
+  <a href="#c6"><span class="ti">06</span>页面背景</a>
+  <a href="#c7"><span class="ti">07</span>页面文案</a>
 </nav>
 <div class="main">
 ${cardHtml('c1', '01', '基本', '站点名称、作者与对外展示的签名', basic)}
 ${cardHtml('c2', '02', '头像', '出现在首页 Hero 与页脚', avatar)}
 ${cardHtml('c3', '03', '当前状态', '首页 Hero 上方的状态徽章', status)}
-${cardHtml('c4', '04', '首页 Hero', '背景图与图上文字的明暗处理', hero)}
-${cardHtml('c5', '05', '页面背景', '各内容页顶部视觉区域的背景图', backdrops)}
-${cardHtml('c6', '06', '页面文案', '各内容页的标题与描述', pages)}
+${cardHtml('c4', '04', '导航按钮', '顶部导航功能区的 GitHub、RSS 与模板入口', navActions)}
+${cardHtml('c5', '05', '首页 Hero', '背景图与图上文字的明暗处理', hero)}
+${cardHtml('c6', '06', '页面背景', '各内容页顶部视觉区域的背景图', backdrops)}
+${cardHtml('c7', '07', '页面文案', '各内容页的标题与描述', pages)}
 
 <div class="error" id="error"></div>
 <div class="actions"><button class="primary" id="submit">保存</button></div>
@@ -172,6 +194,98 @@ segInit('statusSeg', 'statusMode', 'building');
 segInit('heroTextModeSeg', 'heroTextMode', 'auto');
 segInit('themeSeg', 'themeDefault', 'system');
 
+const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+let navLinks = [];
+let navIcons = [];
+function svgOf(body) {
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + body + '</svg>';
+}
+function navIconBody(name) {
+  return (navIcons.find((i) => i.name === name) || {}).body || '<circle cx="12" cy="12" r="8"/>';
+}
+function syncNavJson() {
+  const next = JSON.stringify(navLinks);
+  if ($('socialLinksJson').value !== next) {
+    $('socialLinksJson').value = next;
+    $('socialLinksJson').dispatchEvent(new Event('input', { bubbles: true }));
+  }
+}
+function renderNavLinks() {
+  const wrap = $('navActions');
+  if (!navLinks.length) {
+    wrap.innerHTML = '<div class="navlink-empty">还没有导航按钮</div>';
+    syncNavJson();
+    return;
+  }
+  wrap.innerHTML = navLinks.map((l, i) => {
+    const options = navIcons.map((ic) => '<option value="' + esc(ic.name) + '"' + (ic.name === l.icon ? ' selected' : '') + '>' + esc(ic.name) + '</option>').join('');
+    return '<div class="navlink-row" data-i="' + i + '">'
+      + '<span class="navlink-ico">' + svgOf(navIconBody(l.icon)) + '</span>'
+      + '<input type="text" id="navLabel_' + i + '" data-nav-field="label" value="' + esc(l.label) + '" placeholder="名称">'
+      + '<input type="text" id="navHref_' + i + '" data-nav-field="href" value="' + esc(l.href) + '" placeholder="https://... 或 /rss.xml">'
+      + '<select id="navIcon_' + i + '" data-nav-field="icon">' + options + '</select>'
+      + '<span class="navlink-ops">'
+      + '<button class="small" type="button" data-nav-move="-1" title="上移">↑</button>'
+      + '<button class="small" type="button" data-nav-move="1" title="下移">↓</button>'
+      + '<button class="small danger" type="button" data-nav-del title="删除">×</button>'
+      + '</span></div>';
+  }).join('');
+  syncNavJson();
+}
+function setNavLinks(next) {
+  navLinks = Array.isArray(next) ? next.map((l) => ({ label: l.label || '', href: l.href || '', icon: l.icon || 'link' })) : [];
+  renderNavLinks();
+}
+function navError() {
+  const seen = new Set();
+  for (const l of navLinks) {
+    if (!l.label.trim()) return '导航按钮名称不能为空';
+    if (!l.href.trim()) return '导航按钮 URL 不能为空';
+    if (!l.icon.trim()) return '导航按钮图标不能为空';
+    if (seen.has(l.href.trim())) return '导航按钮 URL 重复:' + l.href.trim();
+    seen.add(l.href.trim());
+  }
+  return '';
+}
+$('navActions').addEventListener('input', (e) => {
+  const row = e.target.closest('.navlink-row');
+  if (!row) return;
+  const i = Number(row.dataset.i);
+  const field = e.target.dataset.navField;
+  if (!navLinks[i] || !field) return;
+  navLinks[i][field] = e.target.value;
+  if (field === 'icon') {
+    const ico = row.querySelector('.navlink-ico');
+    if (ico) ico.innerHTML = svgOf(navIconBody(e.target.value));
+  }
+  syncNavJson();
+});
+$('navActions').addEventListener('change', (e) => {
+  if (e.target.matches('[data-nav-field]')) e.target.dispatchEvent(new Event('input', { bubbles: true }));
+});
+$('navActions').addEventListener('click', (e) => {
+  const btn = e.target.closest('button');
+  const row = e.target.closest('.navlink-row');
+  if (!btn || !row) return;
+  const i = Number(row.dataset.i);
+  if (!navLinks[i]) return;
+  if (btn.dataset.navMove) {
+    const j = i + Number(btn.dataset.navMove);
+    if (j < 0 || j >= navLinks.length) return;
+    const tmp = navLinks[i];
+    navLinks[i] = navLinks[j];
+    navLinks[j] = tmp;
+    renderNavLinks();
+  } else if (btn.hasAttribute('data-nav-del')) {
+    navLinks.splice(i, 1);
+    renderNavLinks();
+  }
+});
+$('navAdd').addEventListener('click', () => {
+  navLinks.push({ label: '新入口', href: 'https://', icon: 'link' });
+  renderNavLinks();
+});
+
 // 左侧目录 scrollspy
 const tocLinks = [...document.querySelectorAll('.toc a')];
 const io = new IntersectionObserver((entries) => {
@@ -190,6 +304,8 @@ window.addEventListener('message', (e) => {
   const msg = e.data;
   if (msg.type === 'init') {
     const v = msg.values;
+    navIcons = msg.icons || [];
+    setNavLinks(v.socialLinks || []);
     for (const f of PLAIN) $(f).value = v[f] ?? '';
     $('statusMode').dispatchEvent(new Event('input', { bubbles: true }));
     $('heroTextMode').dispatchEvent(new Event('input', { bubbles: true }));
@@ -203,7 +319,10 @@ window.addEventListener('message', (e) => {
       }
     }
     // 文件值打底;草稿只在文件没变过时恢复,否则以文件为准
-    restoreStateIfFresh(JSON.stringify(v));
+    const restored = restoreStateIfFresh(JSON.stringify(v));
+    if (restored && $('socialLinksJson').value) {
+      try { setNavLinks(JSON.parse($('socialLinksJson').value)); } catch { /* 保持文件值 */ }
+    }
     THUMBS.forEach(bindThumb);
   } else if (msg.type === 'imagePicked') {
     $(msg.field).value = msg.ref;
@@ -225,8 +344,12 @@ document.querySelectorAll('button.pick').forEach((b) => {
   b.addEventListener('click', () => vscode.postMessage({ type: 'pickImage', field: b.dataset.field }));
 });
 $('submit').addEventListener('click', () => {
+  showError('');
+  const navIssue = navError();
+  if (navIssue) return showError(navIssue);
   const values = {};
   for (const f of PLAIN) values[f] = $(f).value.trim();
+  values.socialLinks = navLinks.map((l) => ({ label: l.label.trim(), href: l.href.trim(), icon: l.icon.trim() }));
   values.backdrops = {};
   values.pages = {};
   for (const k of PAGES) {
@@ -291,7 +414,7 @@ export function openSiteConfigForm(): void {
     const p = panel;
     try {
       if (msg.type === 'ready') {
-        p.webview.postMessage({ type: 'init', values: readSiteConfig(profile.siteFile) });
+        p.webview.postMessage({ type: 'init', values: readSiteConfig(profile.siteFile), icons: readIcons(profile.iconFile) });
       } else if (msg.type === 'refresh') {
         profile = getProfile();
         renderShell();

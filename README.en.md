@@ -2,6 +2,8 @@
 
 <p align="center"><a href="./README.md">简体中文</a> · <a href="./README.en.md">English</a></p>
 
+<p align="center"><a href="https://towardslight.vercel.app/">Demo Site</a> · <a href="https://towardslightcontent.vercel.app/">Personal Site</a></p>
+
 A local writing and management extension built specifically for the TowardsLight blog repository. It brings posts, site configuration, categories, links, preview, and Git commits into VS Code, so the full writing loop can stay inside one workspace.
 
 > This is a purpose-built extension, not a generic Markdown manager. It understands this blog's `site.ts / links.ts / posts/ / images/` layout and the binding between the Astro template and a content profile.
@@ -24,7 +26,7 @@ The blog's content is already file-based: posts are Markdown, site configuration
 The extension is not published to the marketplace yet. Install the local VSIX:
 
 ```bash
-code --install-extension .\towards-light-editor-0.17.5.vsix --force
+code --install-extension .\towards-light-editor-0.18.0.vsix --force
 ```
 
 Run **Developer: Reload Window** after installation. Open the blog repository root when using it. The template directory must contain `package.json` and `scripts/use-profile.mjs`. A content profile needs at least `site.ts`, `links.ts`, and `posts/`; when those are missing, the extension can initialize the directory as a new profile.
@@ -118,8 +120,9 @@ AI-generated commit messages only see the selected files. Recent repository comm
 
 ## Site settings
 
-Site settings write back to the active profile's `site.ts`: site name, author, long and short signatures, email, site URL, default theme, avatar, current status, homepage hero, page backgrounds, and title/description for archive, tags, categories, links, and 404 pages.
+Site settings write back to the active profile's `site.ts`: site name, author, long and short signatures, email, site URL, default theme, avatar, current status, homepage hero, navigation action buttons, page backgrounds, and title/description for archive, tags, categories, links, and 404 pages.
 
+- Navigation action buttons support name, URL, icon, and ordering, and are written to `socialLinks` in `site.ts`; RSS is hidden on desktop and remains available on mobile and in the footer.
 - Image fields show live thumbnails.
 - **Choose Image** copies the selected image into the profile's `images/` directory and references it as `/images/...`.
 - Writes are AST-level, in-place edits, preserving comments, formatting, and `as const` assertions.
@@ -188,7 +191,7 @@ Article-scoped commits read the image references in the post body, which keeps o
 ```bash
 npm install
 npm run build      # esbuild outputs: dist/extension.js + dist/core.mjs
-npm test           # 35 core assertions + 3 Git-context assertions
+npm test           # 36 core assertions + 3 Git-context assertions
 npm run package    # Build the VSIX
 ```
 

@@ -65,6 +65,12 @@ export interface SitePageCopy {
   description: string;
 }
 
+export interface SiteSocialLink {
+  label: string;
+  href: string;
+  icon: string;
+}
+
 export interface SiteConfigValues {
   siteName: string;
   siteNameEn: string;
@@ -86,6 +92,8 @@ export interface SiteConfigValues {
   backdrops: Record<string, string>;
   /** pages.<页面>.{title,description} */
   pages: Record<string, SitePageCopy>;
+  /** Header/footer action links; written to site.socialLinks. */
+  socialLinks: SiteSocialLink[];
 }
 
 const TOP_STRING_FIELDS = [
@@ -105,6 +113,52 @@ function siteObject(sf: import('ts-morph').SourceFile): ObjectLiteralExpression 
   const decl = sf.getVariableDeclaration('site');
   if (!decl) throw new Error('site.ts 里没有找到 export const site');
   return objectLiteralOf(decl.getInitializer(), 'site');
+}
+
+function socialLinksArray(site: ObjectLiteralExpression): import('ts-morph').ArrayLiteralExpression {
+  const arr = unwrapAs(getProp(site, 'socialLinks')?.getInitializer());
+  if (!arr || !Node.isArrayLiteralExpression(arr)) {
+    throw new Error('site.socialLinks must be an array literal');
+  }
+  return arr;
+}
+
+function readSocialLinksFromSite(site: ObjectLiteralExpression): SiteSocialLink[] {
+  try {
+    return socialLinksArray(site)
+      .getElements()
+      .filter((el): el is ObjectLiteralExpression => Node.isObjectLiteralExpression(el))
+      .map((el) => ({
+        label: readStringProp(el, 'label') ?? '',
+        href: readStringProp(el, 'href') ?? '',
+        icon: readStringProp(el, 'icon') ?? '',
+      }))
+      .filter((l) => l.label || l.href || l.icon);
+  } catch {
+    return [];
+  }
+}
+
+export function readSocialLinks(siteFile: string): SiteSocialLink[] {
+  const sf = newProject().addSourceFileAtPath(siteFile);
+  return readSocialLinksFromSite(siteObject(sf));
+}
+
+function normalizeSocialLinks(links: SiteSocialLink[]): SiteSocialLink[] {
+  const seen = new Set<string>();
+  return links.map((raw) => {
+    const link = {
+      label: String(raw.label ?? '').trim(),
+      href: String(raw.href ?? '').trim(),
+      icon: String(raw.icon ?? '').trim(),
+    };
+    if (!link.label) throw new Error('Navigation link label is required');
+    if (!link.href || /[\r\n]/.test(link.href)) throw new Error(`Navigation link URL is required: ${link.label}`);
+    if (!link.icon || /[\r\n]/.test(link.icon)) throw new Error(`Navigation link icon is required: ${link.label}`);
+    if (seen.has(link.href)) throw new Error(`Duplicate navigation link URL: ${link.href}`);
+    seen.add(link.href);
+    return link;
+  });
 }
 
 const unquote = (s: string) => s.replace(/^['"]|['"]$/g, '');
@@ -155,6 +209,7 @@ export function readSiteConfig(siteFile: string): SiteConfigValues {
 
   return {
     ...values,
+    socialLinks: readSocialLinksFromSite(site),
     statusMode: status ? (readStringProp(status, 'mode') ?? '') : '',
     statusText: status ? (readStringProp(status, 'text') ?? '') : '',
     heroBackground: hero ? (readStringProp(hero, 'background') ?? '') : '',
@@ -204,6 +259,19 @@ export function updateSiteConfig(siteFile: string, patch: Partial<SiteConfigValu
         if (copy.title !== undefined && writeStringProp(o, 'title', copy.title)) changed++;
         if (copy.description !== undefined && writeStringProp(o, 'description', copy.description)) changed++;
       }
+    }
+  }
+  if (patch.socialLinks !== undefined) {
+    const links = normalizeSocialLinks(patch.socialLinks);
+    const prop = getProp(site, 'socialLinks');
+    if (!prop) throw new Error('site.ts has no socialLinks property');
+    const body = links
+      .map((l) => `    { label: '${esc(l.label)}', href: '${esc(l.href)}', icon: '${esc(l.icon)}' }`)
+      .join(',\n');
+    const next = links.length ? `[\n${body}\n  ]` : '[]';
+    if (prop.getInitializer()?.getText() !== next) {
+      prop.setInitializer(next);
+      changed++;
     }
   }
   if (changed) sf.saveSync();

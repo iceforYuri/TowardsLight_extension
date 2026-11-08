@@ -37,6 +37,9 @@ assert.equal(cfg.backdrops.archive, '');
 assert.equal(cfg.pages.archive.title, '归档');
 assert.ok(cfg.pages.notFound.description.length > 0);
 assert.equal(cfg.themeDefault, 'system');
+assert.equal(cfg.socialLinks.length, 3);
+assert.equal(cfg.socialLinks[1].label, '模板参考');
+assert.equal(cfg.socialLinks[1].icon, 'database');
 ok('readSiteConfig 读取基本字段与嵌套块(currentStatus/homeHero/pageBackdrops/pages)');
 
 const before = fs.readFileSync(siteFile, 'utf8');
@@ -62,6 +65,25 @@ assert.equal(cfg2.pages.links.title, '宝藏链接');
 assert.equal(cfg2.pages.links.description, '改写后的链接页描述');
 assert.equal(cfg2.pages.archive.title, '归档', '未触碰的页面文案不应变化');
 ok('updateSiteConfig 写回顶层字段与嵌套块并可重读');
+
+const navChanged = core.updateSiteConfig(siteFile, {
+  socialLinks: [
+    { label: 'GitHub', href: 'https://github.com/iceforYuri', icon: 'github' },
+    { label: 'RSS', href: '/rss.xml', icon: 'rss' },
+    { label: '模板参考', href: 'https://github.com/iceforYuri/TowardsLight', icon: 'database' },
+  ],
+});
+assert.equal(navChanged, 1);
+const cfg3 = core.readSiteConfig(siteFile);
+assert.equal(cfg3.socialLinks.length, 3);
+assert.equal(cfg3.socialLinks[2].label, '模板参考');
+assert.equal(cfg3.socialLinks[2].icon, 'database');
+assert.ok(!cfg3.socialLinks.some((l) => l.label === 'Email'));
+assert.throws(
+  () => core.updateSiteConfig(siteFile, { socialLinks: [...cfg3.socialLinks, cfg3.socialLinks[0]] }),
+  /Duplicate|重复/,
+);
+ok('socialLinks 读取、整组写回与重复 URL 拦截');
 
 const after = fs.readFileSync(siteFile, 'utf8');
 assert.ok(after.includes('/** 头像裁切焦点'), '注释应保留');
@@ -111,9 +133,9 @@ ok('renameCategory / deleteCategory 迁移与删除 key');
 
 // ── links.ts ──
 const groups = core.readLinkGroups(linksFile);
-assert.equal(groups.length, 8);
-assert.deepEqual(groups[0], { id: 'code', label: 'Code', description: '代码托管与开源项目', tone: 'steel' });
-ok('readLinkGroups 读出 8 个对象化分组(id/label/description)');
+assert.equal(groups.length, 9);
+assert.deepEqual(groups[0], { id: 'towards-light', label: 'TowardsLight', description: '流光定影，拾光逐金', tone: 'accent' });
+ok('readLinkGroups 读出 9 个对象化分组(id/label/description)');
 
 core.addLink(linksFile, {
   title: 'Example',
@@ -147,7 +169,7 @@ console.log('\n新增链接写入效果:' + linksText.match(/\{\n    title: 'Pin
 
 // ── 链接管理:读全量 / 修改 / 排序 / 删除 / 分组 CRUD ──
 const all = core.readLinks(linksFile);
-assert.equal(all.length, 16, 'showcase 14 条 + 测试新增 2 条');
+assert.equal(all.length, 18, 'showcase 16 条 + 测试新增 2 条');
 assert.equal(all[0].title, 'GitHub');
 assert.equal(all[0].external, true);
 assert.equal(all.at(-1).title, 'Pinia');

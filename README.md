@@ -2,6 +2,8 @@
 
 <p align="center"><a href="./README.md">简体中文</a> · <a href="./README.en.md">English</a></p>
 
+<p align="center"><a href="https://towardslight.vercel.app/">演示网站</a> · <a href="https://towardslightcontent.vercel.app/">个人使用站</a></p>
+
 面向这个博客仓库的本地写作与管理扩展。它把文章、站点配置、分类、链接、预览和 Git 提交收进 VS Code：新建文章、写正文、插图、改元数据、预览页面、勾选提交，都可以在一个工作区里完成。
 
 > 这是为 TowardsLight 定制的插件，不是通用 Markdown 管理器。它理解这个博客的 `site.ts / links.ts / posts/ / images/` 结构，以及模板与内容档案的绑定机制。
@@ -24,7 +26,7 @@
 暂不上架扩展市场，本地安装 VSIX：
 
 ```bash
-code --install-extension .\towards-light-editor-0.17.5.vsix --force
+code --install-extension .\towards-light-editor-0.18.0.vsix --force
 ```
 
 安装后执行一次 **Developer: Reload Window**。使用时请打开博客工程根目录；模板目录需要包含 `package.json` 和 `scripts/use-profile.mjs`。档案目录至少需要包含 `site.ts`、`links.ts` 和 `posts/`，缺失时插件会报错并给出修复入口。
@@ -118,8 +120,9 @@ AI 生成提交信息时，只看本次勾选的文件。仓库最近提交仅�
 
 ## 站点信息
 
-站点信息写回当前档案的 `site.ts`：站点名、作者、长短签名、邮箱、站点 URL、默认主题、头像、当前状态、首页 Hero、各页面背景、归档/标签/分类/链接/404 页面标题与描述。
+站点信息写回当前档案的 `site.ts`：站点名、作者、长短签名、邮箱、站点 URL、默认主题、头像、当前状态、首页 Hero、导航按钮、各页面背景、归档/标签/分类/链接/404 页面标题与描述。
 
+- 导航按钮可编辑名称、URL、图标和顺序，写回 `site.ts` 的 `socialLinks`；桌面端隐藏 RSS，移动端与页脚显示全部。
 - 图片字段带实时缩略图。
 - 「选择图片…」会把所选图片复制进档案 `images/`，并按 `/images/...` 引用。
 - 写回走 AST 级就地修改，注释、格式和 `as const` 断言会保留。
@@ -188,7 +191,7 @@ AI 生成提交信息时，只看本次勾选的文件。仓库最近提交仅�
 ```bash
 npm install
 npm run build      # esbuild 产物：dist/extension.js + dist/core.mjs
-npm test           # 35 项核心断言 + 3 项 Git 上下文断言
+npm test           # 36 项核心断言 + 3 项 Git 上下文断言
 npm run package    # 产出 VSIX
 ```
 
