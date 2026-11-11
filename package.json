@@ -2,7 +2,7 @@
   "name": "towards-light-editor",
   "displayName": "TowardsLight 博客工具",
   "description": "TowardsLight 博客的文章管理、写作预览与站点配置工具(本地扩展)",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "private": true,
   "publisher": "towardslight",
   "license": "MIT",
@@ -27,6 +27,11 @@
           "type": "number",
           "default": 4321,
           "description": "Astro dev server 端口(预览用)"
+        },
+        "towardsLight.nodePath": {
+          "type": "string",
+          "default": "",
+          "description": "预览 dev server 使用的 Node.js 可执行文件路径;留空则自动检测 fnm/PATH"
         }
       }
     },

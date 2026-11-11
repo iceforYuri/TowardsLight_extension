@@ -38,7 +38,7 @@ assert.equal(cfg.pages.archive.title, '归档');
 assert.ok(cfg.pages.notFound.description.length > 0);
 assert.equal(cfg.themeDefault, 'system');
 assert.equal(cfg.socialLinks.length, 3);
-assert.equal(cfg.socialLinks[1].label, '模板参考');
+assert.equal(cfg.socialLinks[1].href, 'https://github.com/iceforYuri/TowardsLight');
 assert.equal(cfg.socialLinks[1].icon, 'database');
 ok('readSiteConfig 读取基本字段与嵌套块(currentStatus/homeHero/pageBackdrops/pages)');
 
@@ -70,13 +70,13 @@ const navChanged = core.updateSiteConfig(siteFile, {
   socialLinks: [
     { label: 'GitHub', href: 'https://github.com/iceforYuri', icon: 'github' },
     { label: 'RSS', href: '/rss.xml', icon: 'rss' },
-    { label: '模板参考', href: 'https://github.com/iceforYuri/TowardsLight', icon: 'database' },
+    { label: 'Template', href: 'https://github.com/iceforYuri/TowardsLight', icon: 'database' },
   ],
 });
 assert.equal(navChanged, 1);
 const cfg3 = core.readSiteConfig(siteFile);
 assert.equal(cfg3.socialLinks.length, 3);
-assert.equal(cfg3.socialLinks[2].label, '模板参考');
+assert.equal(cfg3.socialLinks[2].label, 'Template');
 assert.equal(cfg3.socialLinks[2].icon, 'database');
 assert.ok(!cfg3.socialLinks.some((l) => l.label === 'Email'));
 assert.throws(
@@ -136,6 +136,7 @@ const groups = core.readLinkGroups(linksFile);
 assert.equal(groups.length, 9);
 assert.deepEqual(groups[0], { id: 'towards-light', label: 'TowardsLight', description: '流光定影，拾光逐金', tone: 'accent' });
 ok('readLinkGroups 读出 9 个对象化分组(id/label/description)');
+const baseLinkCount = core.readLinks(linksFile).length;
 
 core.addLink(linksFile, {
   title: 'Example',
@@ -169,7 +170,7 @@ console.log('\n新增链接写入效果:' + linksText.match(/\{\n    title: 'Pin
 
 // ── 链接管理:读全量 / 修改 / 排序 / 删除 / 分组 CRUD ──
 const all = core.readLinks(linksFile);
-assert.equal(all.length, 18, 'showcase 16 条 + 测试新增 2 条');
+assert.equal(all.length, baseLinkCount + 2, 'showcase 现有链接 + 测试新增 2 条');
 assert.equal(all[0].title, 'GitHub');
 assert.equal(all[0].external, true);
 assert.equal(all.at(-1).title, 'Pinia');
@@ -390,6 +391,30 @@ fs.writeFileSync(path.join(fakeRoot, 'personal', 'links.ts'), '');
 p = core.resolveProfile(fakeRoot, '');
 assert.equal(p.kind, 'personal', 'personal/ 存在时自动命中');
 ok('resolveProfile 解析顺序:env > personal > showcase');
+
+// Node runtime resolver: fnm 的新版本应胜过 PATH 里的旧 npm/node 组合
+const runtimeTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tl-node-runtime-'));
+const runtimeTpl = path.join(runtimeTmp, 'template');
+const oldNodeDir = path.join(runtimeTmp, 'old-node');
+const fnmNode = path.join(runtimeTmp, 'fnm', 'node-versions', 'v26.13.0', 'installation');
+fs.mkdirSync(runtimeTpl, { recursive: true });
+fs.mkdirSync(oldNodeDir, { recursive: true });
+fs.mkdirSync(fnmNode, { recursive: true });
+fs.writeFileSync(path.join(runtimeTpl, 'package.json'), JSON.stringify({ engines: { node: '>=22.23.4' } }));
+fs.writeFileSync(path.join(oldNodeDir, 'node.exe'), '');
+fs.writeFileSync(path.join(oldNodeDir, 'npm.cmd'), '');
+fs.writeFileSync(path.join(fnmNode, 'node.exe'), '');
+fs.writeFileSync(path.join(fnmNode, 'npm.cmd'), '');
+const runtime = core.resolveNodeRuntime(runtimeTpl, {
+  platform: 'win32',
+  env: { PATH: oldNodeDir, APPDATA: runtimeTmp },
+  probe: (file) => (file === path.join(fnmNode, 'node.exe') ? 'v26.13.0' : file === path.join(oldNodeDir, 'node.exe') ? 'v22.14.0' : null),
+});
+assert.equal(runtime.node, path.join(fnmNode, 'node.exe'));
+assert.equal(runtime.npm, path.join(fnmNode, 'npm.cmd'));
+assert.equal(runtime.version, 'v26.13.0');
+ok('resolveNodeRuntime 跳过旧 PATH Node 并选择满足模板的 fnm 版本');
+fs.rmSync(runtimeTmp, { recursive: true, force: true });
 
 const covers = core.listImages(path.join(SHOWCASE, 'images'));
 assert.ok(covers.includes('/images/covers/wide.svg'));

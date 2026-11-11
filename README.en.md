@@ -26,7 +26,7 @@ The blog's content is already file-based: posts are Markdown, site configuration
 The extension is not published to the marketplace yet. Install the local VSIX:
 
 ```bash
-code --install-extension .\towards-light-editor-0.18.0.vsix --force
+code --install-extension .\towards-light-editor-0.18.1.vsix --force
 ```
 
 Run **Developer: Reload Window** after installation. Open the blog repository root when using it. The template directory must contain `package.json` and `scripts/use-profile.mjs`. A content profile needs at least `site.ts`, `links.ts`, and `posts/`; when those are missing, the extension can initialize the directory as a new profile.
@@ -168,7 +168,7 @@ Enter an icon name from lucide.dev, and the extension extracts its SVG from `luc
 The settings panel currently contains two groups:
 
 - **AI Summary** uses the VS Code language model by default, reusing the Copilot sign-in without extra configuration. It can also switch to a custom OpenAI-compatible endpoint. `Base URL` and `model` are stored in extension workspace state; the `API key` is stored separately in VS Code `SecretStorage` and is never written to a configuration file. If the model is unavailable or a request fails, the extension falls back to local extraction.
-- **Preview** configures the starting port for the Astro dev server; occupied ports advance automatically.
+- **Preview** configures the starting port for the Astro dev server; occupied ports advance automatically. When Node.js is left blank, the extension resolves a template-compatible runtime from fnm or PATH, and a specific `node.exe` can be set manually.
 
 ![Settings: AI summary and preview port](image/README/1793850547058.png)
 
@@ -191,7 +191,7 @@ Article-scoped commits read the image references in the post body, which keeps o
 ```bash
 npm install
 npm run build      # esbuild outputs: dist/extension.js + dist/core.mjs
-npm test           # 36 core assertions + 3 Git-context assertions
+npm test           # 37 core assertions + 3 Git-context assertions
 npm run package    # Build the VSIX
 ```
 

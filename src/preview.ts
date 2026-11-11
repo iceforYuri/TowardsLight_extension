@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import * as vscode from 'vscode';
+import { resolveNodeRuntime } from './core';
 import { getProfile, getTemplateDir, stateStore } from './util';
 
 /** 一个运行中的预览 server 的账本记录 */
@@ -235,11 +236,15 @@ export async function startPreview(): Promise<ServerRec> {
   let port = preferred;
   while (!(await portFree(port))) port++;
 
-  const cmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const nodePath = vscode.workspace.getConfiguration('towardsLight').get<string>('nodePath', '').trim();
+  const runtime = resolveNodeRuntime(templateDir, { configured: nodePath || undefined });
+  const nodeDir = path.dirname(runtime.node);
+  const cmd = runtime.npm;
   log.appendLine(`—— 启动 dev server:模板 ${templateDir} | 档案 ${profile.dir} | 端口 ${port} ——`);
+  log.appendLine(`[node] ${runtime.version}(${runtime.source}) ${runtime.node}`);
   const proc = spawn(cmd, ['run', 'dev', '--', '--port', String(port)], {
     cwd: templateDir,
-    env: { ...process.env, SITE_PROFILE_DIR: profile.dir },
+    env: { ...process.env, SITE_PROFILE_DIR: profile.dir, PATH: `${nodeDir}${path.delimiter}${process.env.PATH ?? ''}` },
     // Windows 上新版 Node 直接 spawn .cmd 会抛 EINVAL,走 shell
     shell: process.platform === 'win32',
     windowsHide: true,
@@ -281,7 +286,7 @@ export async function startPreview(): Promise<ServerRec> {
     );
   };
 
-  const deadline = Date.now() + 30_000;
+  const deadline = Date.now() + 180_000;
   while (Date.now() < deadline) {
     if (status.spawnError) fail(`无法启动 npm:${status.spawnError.message}`);
     if (status.exitCode !== null) fail(`dev server 启动后即退出(code=${status.exitCode})`);
@@ -295,7 +300,7 @@ export async function startPreview(): Promise<ServerRec> {
     }
     await new Promise((r) => setTimeout(r, 400));
   }
-  return fail('dev server 启动超时(30s)');
+  return fail('dev server 启动超时(180s)');
 }
 
 /** 通用 iframe 预览面板 */

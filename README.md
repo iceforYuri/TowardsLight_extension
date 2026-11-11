@@ -26,7 +26,7 @@
 暂不上架扩展市场，本地安装 VSIX：
 
 ```bash
-code --install-extension .\towards-light-editor-0.18.0.vsix --force
+code --install-extension .\towards-light-editor-0.18.1.vsix --force
 ```
 
 安装后执行一次 **Developer: Reload Window**。使用时请打开博客工程根目录；模板目录需要包含 `package.json` 和 `scripts/use-profile.mjs`。档案目录至少需要包含 `site.ts`、`links.ts` 和 `posts/`，缺失时插件会报错并给出修复入口。
@@ -168,7 +168,7 @@ AI 生成提交信息时，只看本次勾选的文件。仓库最近提交仅�
 设置面板目前包含两类配置：
 
 - **AI 摘要**：默认使用 VS Code 语言模型，借用 Copilot 登录态，零配置；也可切到自定义 OpenAI 兼容端点。`Base URL` 与 `model` 保存在扩展的 workspace 状态里；`API key` 单独写入 VS Code `SecretStorage`，不会落进配置文件。模型不可用或请求失败时回退到本地规则提取。
-- **预览**：设置 Astro dev server 起始端口，端口占用时自动顺延。
+- **预览**：设置 Astro dev server 起始端口，端口占用时自动顺延；Node.js 留空时自动检测 fnm / PATH 中满足模板要求的版本，也可手动指定 `node.exe`。
 
 ![设置：AI 摘要与预览端口](image/README/1793850547058.png)
 
@@ -191,7 +191,7 @@ AI 生成提交信息时，只看本次勾选的文件。仓库最近提交仅�
 ```bash
 npm install
 npm run build      # esbuild 产物：dist/extension.js + dist/core.mjs
-npm test           # 36 项核心断言 + 3 项 Git 上下文断言
+npm test           # 37 项核心断言 + 3 项 Git 上下文断言
 npm run package    # 产出 VSIX
 ```
 

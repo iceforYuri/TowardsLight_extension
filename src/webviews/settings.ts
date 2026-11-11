@@ -26,7 +26,9 @@ function body(): string {
   const preview = `
 <label class="f">预览起始端口</label>
 <input type="number" id="devPort" min="1024" max="65535" step="1" style="max-width:160px">
-<div class="hint">被占用时自动顺延;改动对下次启动生效</div>
+<label class="f">Node.js 路径</label>
+<input type="text" id="nodePath" placeholder="留空自动检测 fnm / PATH;可填 node.exe 或安装目录">
+<div class="hint">端口被占用时自动顺延;Node 改动对下次启动生效</div>
 `;
   const paths = `
 <label class="f">模板目录</label>
@@ -85,6 +87,7 @@ window.addEventListener('message', (e) => {
     $('baseUrl').value = m.values.baseUrl || '';
     $('model').value = m.values.model || '';
     $('devPort').value = m.devPort;
+    $('nodePath').value = m.nodePath || '';
     $('keyHint').textContent = m.hasKey ? '已保存 key(不显示,输入即覆盖)' : '未设置';
     $('tplPath').textContent = m.templateDir || '未识别';
     $('profPath').textContent = m.profileDir || '未绑定';
@@ -114,6 +117,7 @@ $('submit').addEventListener('click', () => {
     values: { provider, baseUrl: $('baseUrl').value.trim(), model: $('model').value.trim() },
     apiKey: $('apiKey').value,
     devPort: port,
+    nodePath: $('nodePath').value.trim(),
   });
 });
 vscode.postMessage({ type: 'ready' });
@@ -145,6 +149,7 @@ export function openSettings(): void {
           values: getAiSettings(),
           hasKey: await hasApiKey(),
           devPort: vscode.workspace.getConfiguration('towardsLight').get<number>('devPort', 4321),
+          nodePath: vscode.workspace.getConfiguration('towardsLight').get<string>('nodePath', ''),
           templateDir: safeTemplate(),
           profileDir: safeProfile(),
         });
@@ -158,6 +163,9 @@ export function openSettings(): void {
         await vscode.workspace
           .getConfiguration('towardsLight')
           .update('devPort', msg.devPort, vscode.ConfigurationTarget.Workspace);
+        await vscode.workspace
+          .getConfiguration('towardsLight')
+          .update('nodePath', msg.nodePath || undefined, vscode.ConfigurationTarget.Workspace);
         panel.webview.postMessage({ type: 'saved' });
       }
     } catch (e) {
